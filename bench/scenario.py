@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """Scenario benchmark: one machine, multiple cores, sustained load, no Redis.
 
-The standing format for every future version: Python rivals first, then the
-Rust champion (governor). Two scenarios, each a 60-second max-speed hammer:
-
-  loose — budget 1000 admits / 10 s per client (admit-friendly)
-  tight — budget 10 admits / 10 s per client (reject-dominated)
+The standing format for every version: ONE multi-process test, TWO rate
+settings on 10-second windows (loose 1000/10 s, tight 10/10 s), THREE repeats
+each — engines: dripline (pure Python) vs Python rivals (limits fixed-window,
+aiolimiter) vs the Rust champion (governor, always present). Headline metric:
+how close is dripline to governor.
 
 Topology (the Redis-less deployment model): W worker processes, each with its
 OWN limiter instance, running simultaneously on pinned cores. We report total
-sustained decisions/s across workers plus admit counts — admits prove the
-configured budget actually held (ceiling per client ≈ burst + rate x duration).
+sustained decisions/s per repeat (median highlighted) plus admit counts —
+admits prove the configured budget actually held (ceiling per client ≈
+burst + rate x duration).
 
-    python bench/scenario.py                       # both scenarios, 60 s each
-    python bench/scenario.py --scenario tight      # one scenario
+    python bench/scenario.py                       # both settings, 3 repeats
+    python bench/scenario.py --scenario tight      # one setting
     python bench/scenario.py --quick               # 3 s smoke, no files
 """
 
@@ -37,6 +38,7 @@ WORKERS = 4
 CLIENTS = 100
 DURATION_S = 60.0        # release protocol
 FAST_DURATION_S = 20.0   # fast default: 2 window rolls, millions of decisions
+REPEATS = 3              # every cell runs this many times; median reported
 BLOCK = 1000          # decisions between deadline checks (clock cost amortized)
 
 SCENARIOS = {
@@ -53,7 +55,7 @@ SCENARIOS = {
 }
 
 ENGINE_ORDER = ["no-op-floor", "dripline-gcra", "limits-fixed-window",
-                "limits-moving-window", "aiolimiter-perkey", "governor-rust"]
+                "aiolimiter-perkey", "governor-rust"]
 
 
 def decider_for(engine: str, sc: dict):
@@ -171,11 +173,12 @@ def render(version: str, results: list[dict], env: dict, params: dict) -> str:
         f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} — do not edit. -->",
         f"# Scenario benchmark — one machine, multiple cores ({version})",
         "",
-        f"Standing format: dripline vs Python rivals vs the Rust champion (governor).",
+        "ONE multi-process test · two rate settings on 10-second windows · "
+        f"{params['repeats']} repeats each, median highlighted. Engines: dripline",
+        "(pure Python) → Python rivals → **governor (Rust, always present)**.",
         f"{params['workers']} worker processes, each with its OWN limiter (the Redis-less",
         f"deployment model), {params['workers']} pinned cores, {params['clients']} clients",
-        f"round-robin per worker, max-speed load for {params['duration']:.0f} s per",
-        "scenario. No shared backend anywhere, by design.",
+        f"round-robin per worker, max-speed load for {params['duration']:.0f} s per repeat.",
         "",
         f"Environment: {env['python']} · {env['cpu']} · {env['platform']}",
         "",
@@ -185,58 +188,63 @@ def render(version: str, results: list[dict], env: dict, params: dict) -> str:
         sc = SCENARIOS[name]
         rows = [r for r in results if r["scenario"] == name]
         lines += [
-            f"## Scenario {name.upper()} — {sc['label']}",
+            f"## Rate setting {name.upper()} — {sc['label']}",
             "",
             f"Theoretical admit ceiling per client over {params['duration']:.0f} s: "
             f"~{sc['ceiling']:.0f} (burst + sustained). Admits far below it mean the",
             "engine rejected everything beyond budget; admits above it would be a bug.",
             "",
-            "| engine | total dec/s (all workers) | per-worker dec/s | admits | admit % | admits/client (worst) |",
-            "|---|---:|---|---:|---:|---:|",
+            "| engine | dec/s per repeat | median dec/s | admits | admit % | admits/client (worst) |",
+            "|---|---|---:|---:|---:|---:|",
         ]
         for r in sorted(rows, key=lambda x: ENGINE_ORDER.index(x["engine"])):
-            pw = " / ".join(f"{x:,.0f}" for x in r["per_worker_dec_per_s"])
+            reps = " / ".join(f"{x:,}" for x in r["per_repeat_dec_s"])
             adm = "—" if r["engine"] == "no-op-floor" else f"{r['admits']:,}"
             ratio = "—" if r["engine"] == "no-op-floor" else f"{r['admit_ratio'] * 100:.2f}%"
             apc = "—" if r["engine"] == "no-op-floor" else f"{r['worst_admits_per_client']:.0f}"
-            lines.append(f"| {r['engine']} | {r['total_dec_per_s']:,} | {pw} | {adm} | "
+            lines.append(f"| {r['engine']} | {reps} | **{r['total_dec_per_s']:,}** | {adm} | "
                          f"{ratio} | {apc} |")
             summary.setdefault(r["engine"], {})[name] = r
         lines.append("")
 
     lines += ["## Summary — the standing scoreboard", "",
-              "| engine | loose dec/s | loose admit % | tight dec/s | tight admit % |",
+              "Headline metric: **% of governor** (100% = caught up to Rust).",
+              "",
+              "| engine | loose dec/s | loose %gov | tight dec/s | tight %gov |",
               "|---|---:|---:|---:|---:|"]
     for engine in ENGINE_ORDER:
         s = summary.get(engine)
         if not s:
             continue
-        cells = []
+        cells = [engine]
         for name in ("loose", "tight"):
-            r = s.get(name)
+            r, gov = s.get(name), summary.get("governor-rust", {}).get(name)
             if r is None:
                 cells += ["—", "—"]
-            elif engine == "no-op-floor":
-                cells += [f"{r['total_dec_per_s']:,}", "—"]
+            elif gov is None or engine == "governor-rust":
+                cells += [f"**{r['total_dec_per_s']:,}**", "**100**"]
             else:
-                cells += [f"{r['total_dec_per_s']:,}", f"{r['admit_ratio'] * 100:.2f}%"]
-        lines.append(f"| {engine} | " + " | ".join(cells) + " |")
+                pct = r["total_dec_per_s"] / gov["total_dec_per_s"] * 100
+                cells += [f"{r['total_dec_per_s']:,}", f"{pct:.0f}%"]
+        lines.append(f"| {cells[0]} | " + " | ".join(cells[1:]) + " |")
 
     ours = summary.get("dripline-gcra", {}).get("loose")
     best_py = None
-    for e in ("aiolimiter-perkey", "limits-fixed-window", "limits-moving-window"):
+    for e in ("aiolimiter-perkey", "limits-fixed-window"):
         r = summary.get(e, {}).get("loose")
         if r and (best_py is None or r["total_dec_per_s"] > best_py["total_dec_per_s"]):
             best_py = r
-    rust = summary.get("governor-rust", {}).get("loose")
-    lines += ["", "Positioning (loose-scenario throughput):", ""]
+    lines += ["", "Positioning:", ""]
+    for name in ("loose", "tight"):
+        o, gov = (summary.get("dripline-gcra", {}).get(name),
+                  summary.get("governor-rust", {}).get(name))
+        if o and gov:
+            lines.append(f"- {name.upper()}: dripline is at "
+                         f"**{o['total_dec_per_s'] / gov['total_dec_per_s'] * 100:.0f}%** "
+                         f"of governor ({gov['total_dec_per_s'] / o['total_dec_per_s']:.1f}x gap)")
     if ours and best_py:
         lines.append(f"- vs best Python rival ({best_py['engine']}): "
                      f"**{ours['total_dec_per_s'] / best_py['total_dec_per_s']:.2f}x**")
-    if ours and rust:
-        lines.append(f"- vs Rust governor: "
-                     f"**{ours['total_dec_per_s'] / rust['total_dec_per_s']:.2f}x** "
-                     f"(governor is {rust['total_dec_per_s'] / ours['total_dec_per_s']:.1f}x faster)")
     lines += [
         "",
         "## Notes",
@@ -265,6 +273,8 @@ def main() -> int:
                          "vX.Y.scenario.md output (default: fast 20 s, "
                          "vX.Y.scenario.fast.md)")
     ap.add_argument("--workers", type=int, default=WORKERS)
+    ap.add_argument("--repeats", type=int, default=REPEATS,
+                    help="repeats per cell; median reported (default 3)")
     ap.add_argument("--version", default="v0.1")
     ap.add_argument("--quick", action="store_true", help="3 s smoke, no files")
     ap.add_argument("--worker", nargs=3, metavar=("ENGINE", "SCENARIO", "DURATION"),
@@ -306,15 +316,29 @@ def main() -> int:
     results = []
     for name in names:
         for engine in engines:
-            print(f"{name}/{engine}…", file=sys.stderr)
-            results.append(run_engine(engine, name, args.duration, args.workers, bin_path))
-            r = results[-1]
-            print(f"  -> {r['total_dec_per_s']:,} dec/s, admits {r['admits']:,}",
+            reps = []
+            for rep in range(args.repeats):
+                print(f"{name}/{engine} repeat {rep + 1}/{args.repeats}…", file=sys.stderr)
+                reps.append(run_engine(engine, name, args.duration, args.workers, bin_path))
+
+            def mid(field, _reps=reps):
+                vals = sorted(r[field] for r in _reps)
+                return vals[len(vals) // 2]
+
+            rec = {"engine": engine, "scenario": name, "workers": args.workers,
+                   "per_repeat_dec_s": [r["total_dec_per_s"] for r in reps],
+                   "total_dec_per_s": mid("total_dec_per_s"),
+                   "admits": mid("admits"), "admit_ratio": mid("admit_ratio"),
+                   "worst_admits_per_client": max(r["worst_admits_per_client"] for r in reps),
+                   "repeats_raw": reps}
+            results.append(rec)
+            print(f"  -> {engine} median {rec['total_dec_per_s']:,} dec/s "
+                  f"(repeats: {', '.join(f'{x:,}' for x in rec['per_repeat_dec_s'])})",
                   file=sys.stderr)
 
     report = render(args.version, results, env,
                     {"workers": args.workers, "clients": CLIENTS,
-                     "duration": args.duration})
+                     "duration": args.duration, "repeats": args.repeats})
     print(report)
     if not args.quick:
         suffix = "" if args.release else ".fast"
@@ -327,17 +351,21 @@ def main() -> int:
             try:
                 prev = json.loads(raw_path.read_text()).get("results", [])
                 names_set = set(names)
-                results = [r for r in prev if r.get("scenario") not in names_set] + results
+                # Old-format records (pre per-repeat aggregation) cannot be
+                # re-rendered; they stay in git history, not in this report.
+                results = [r for r in prev if r.get("scenario") not in names_set
+                           and "per_repeat_dec_s" in r] + results
                 report = render(args.version, results, env,
                                 {"workers": args.workers, "clients": CLIENTS,
-                                 "duration": args.duration})
+                                 "duration": args.duration, "repeats": args.repeats})
             except (OSError, json.JSONDecodeError):
                 pass
         (out / f"{args.version}.scenario{suffix}.md").write_text(report, encoding="utf-8")
         (raw_path).write_text(
             json.dumps({"env": env, "params": {"workers": args.workers,
                                                "clients": CLIENTS,
-                                               "duration": args.duration},
+                                               "duration": args.duration,
+                                               "repeats": args.repeats},
                         "results": results}, indent=1), encoding="utf-8")
         print(f"wrote bench/results/{args.version}.scenario{suffix}.md (+ raw json)",
               file=sys.stderr)

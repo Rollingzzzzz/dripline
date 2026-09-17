@@ -82,9 +82,10 @@ The standing scoreboard format for every version: one machine, multiple cores
 (worker processes = pinned cores, each with its own limiter — the Redis-less
 deployment model), max-speed load for 60 s per scenario against 100 clients
 round-robin. Two fixed scenarios: **loose** (1000 admits / 10 s per client)
-and **tight** (10 admits / 10 s per client, reject-dominated). Rows: dripline,
-Python rivals (limits engine x2, aiolimiter), Rust governor. Reports total
-sustained decisions/s plus admit counts (budget compliance evidence).
+and **tight** (10 admits / 10 s per client, reject-dominated), three repeats
+each, median reported. Rows: dripline, Python rivals (limits fixed-window,
+aiolimiter), Rust governor. Reports total sustained decisions/s per repeat
+plus admit counts (budget compliance evidence).
 
 ```bash
 docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
@@ -92,6 +93,22 @@ docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-sli
 docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
   python /bench/bench/scenario.py --scenario tight   # merges into the same report
 ```
+
+## Standing verification — every core change runs the scoreboard
+
+The scenario benchmark is the project's regression gate, not a one-off. Every
+change to `src/dripline` (hot path, storage, algorithm) is verified with a
+FAST-protocol run of the standing format before it is committed:
+
+```bash
+docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
+  python /bench/bench/scenario.py --version vX.Y
+```
+
+The headline tracked across versions is **% of governor**. A change does not
+ship as-is if it lowers dripline's share of governor's sustained throughput,
+or breaks budget compliance (admits per client above the ceiling). Release
+protocol (`--release`) is re-run for version tags on top of this.
 
 ## Fast vs release protocol
 
