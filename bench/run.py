@@ -83,16 +83,18 @@ def _make_noop() -> Callable[[str], bool]:
     return decide
 
 
-def _make_dripline() -> Callable[[str], bool]:
-    from dripline import GcraLimiter
-    lim = GcraLimiter(rate_per_second=1000 / 60, burst=100)
+def _make_dripline(rate_per_second: float, burst: int) -> Callable[[], Callable[[str], bool]]:
+    def factory() -> Callable[[str], bool]:
+        from dripline import GcraLimiter
+        lim = GcraLimiter(rate_per_second=rate_per_second, burst=burst)
 
-    def decide(key: str) -> bool:
-        return lim.try_acquire(key).allowed
-    return decide
+        def decide(key: str) -> bool:
+            return lim.try_acquire(key).allowed
+        return decide
+    return factory
 
 
-def _make_limits(strategy: str) -> Callable[[], Callable[[str], bool]]:
+def _make_limits(strategy: str, rate_str: str) -> Callable[[], Callable[[str], bool]]:
     def factory() -> Callable[[str], bool]:
         from limits import parse
         from limits.storage import MemoryStorage
@@ -100,7 +102,7 @@ def _make_limits(strategy: str) -> Callable[[], Callable[[str], bool]]:
         storage = MemoryStorage()
         engine = {"fixed": FixedWindowRateLimiter,
                   "moving": MovingWindowRateLimiter}[strategy](storage)
-        rate = parse("1000/minute")
+        rate = parse(rate_str)
 
         def decide(key: str) -> bool:
             return engine.hit(rate, key)
@@ -108,17 +110,17 @@ def _make_limits(strategy: str) -> Callable[[], Callable[[str], bool]]:
     return factory
 
 
-def _make_aiolimiter_perkey() -> Callable[[], Callable[[str], object]]:
+def _make_aiolimiter_perkey(max_rate: int, period: float) -> Callable[[], Callable[[str], object]]:
     def factory():
         from aiolimiter import AsyncLimiter
-        local: dict[str, AsyncLimiter] = {}
+        local: dict = {}
 
         # AsyncLimiter binds to the running loop on first use, so instances
         # must be created and consumed inside one asyncio.run() session.
         async def decide(key: str) -> bool:
             lim = local.get(key)
             if lim is None:
-                lim = local[key] = AsyncLimiter(1000, 60)
+                lim = local[key] = AsyncLimiter(max_rate, period)
             if not lim.has_capacity(1):
                 return False
             await lim.acquire(1)
@@ -127,24 +129,53 @@ def _make_aiolimiter_perkey() -> Callable[[], Callable[[str], object]]:
     return factory
 
 
-VARIANTS = [
-    Variant("no-op", "no-op (floor)", "plain function call", "—",
-             "sync", _make_noop),
-    Variant("dripline-gcra", "dripline GCRA", "GCRA, one int per client",
-             "1000/min, burst 100", "sync", _make_dripline,
-             guard_capacity=100),
-    Variant("limits-fixed-window", "slowapi engine (limits) — fixed window",
-             "fixed window", "1000/minute", "sync", _make_limits("fixed"),
-             requires="limits", guard_capacity=1000, max_rss_k=1_000_000),
-    Variant("limits-moving-window", "slowapi engine (limits) — moving window",
-             "moving window", "1000/minute", "sync", _make_limits("moving"),
-             requires="limits", guard_capacity=1000, max_rss_k=1_000_000),
-    Variant("aiolimiter-perkey", "aiolimiter (per-key instances)",
-            "leaky bucket, one limiter per key",
-            "AsyncLimiter(1000, 60 s) per key", "async", _make_aiolimiter_perkey(),
-            requires="aiolimiter", guard_capacity=1000, max_rss_k=1_000_000),
-]
-VARIANTS_BY_NAME = {v.name: v for v in VARIANTS}
+def build_variants(profile: str) -> list[Variant]:
+    """Registry per profile.
+
+    default: each library's idiomatic '1000 per minute' (burst semantics differ,
+    documented in the report) — admit-dominated under the standard workload.
+    tight: instant capacity 1 for every engine, so the bulk pass is
+    reject-dominated — the red path is what gets measured.
+    """
+    if profile not in ("default", "tight"):
+        raise ValueError(f"unknown profile: {profile}")
+    if profile == "default":
+        return [
+            Variant("no-op", "no-op (floor)", "plain function call", "—",
+                     "sync", _make_noop),
+            Variant("dripline-gcra", "dripline GCRA", "GCRA, one int per client",
+                    "1000/min, burst 100", "sync", _make_dripline(1000 / 60, 100),
+                    guard_capacity=100),
+            Variant("limits-fixed-window", "slowapi engine (limits) — fixed window",
+                    "fixed window", "1000/minute", "sync", _make_limits("fixed", "1000/minute"),
+                    requires="limits", guard_capacity=1000, max_rss_k=1_000_000),
+            Variant("limits-moving-window", "slowapi engine (limits) — moving window",
+                    "moving window", "1000/minute", "sync", _make_limits("moving", "1000/minute"),
+                    requires="limits", guard_capacity=1000, max_rss_k=1_000_000),
+            Variant("aiolimiter-perkey", "aiolimiter (per-key instances)",
+                    "leaky bucket, one limiter per key",
+                    "AsyncLimiter(1000, 60 s) per key", "async",
+                    _make_aiolimiter_perkey(1000, 60),
+                    requires="aiolimiter", guard_capacity=1000, max_rss_k=1_000_000),
+        ]
+    return [
+        Variant("no-op", "no-op (floor)", "plain function call", "—",
+                 "sync", _make_noop),
+        Variant("dripline-gcra", "dripline GCRA", "GCRA, one int per client",
+                "10/min, burst 1 (capacity 1)", "sync", _make_dripline(10 / 60, 1),
+                guard_capacity=1),
+        Variant("limits-fixed-window", "slowapi engine (limits) — fixed window",
+                "fixed window", "1/minute", "sync", _make_limits("fixed", "1/minute"),
+                requires="limits", guard_capacity=1, max_rss_k=1_000_000),
+        Variant("limits-moving-window", "slowapi engine (limits) — moving window",
+                "moving window", "1/minute", "sync", _make_limits("moving", "1/minute"),
+                requires="limits", guard_capacity=1, max_rss_k=1_000_000),
+        Variant("aiolimiter-perkey", "aiolimiter (per-key instances)",
+                "leaky bucket, one limiter per key",
+                "AsyncLimiter(1, 60 s) per key", "async",
+                _make_aiolimiter_perkey(1, 60),
+                requires="aiolimiter", guard_capacity=1, max_rss_k=1_000_000),
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -210,10 +241,10 @@ def env_report(available: list[Variant]) -> dict:
     }
 
 
-def resolve_variants(no_install: bool) -> tuple[list[Variant], list[dict]]:
+def resolve_variants(variants: list[Variant], no_install: bool) -> tuple[list[Variant], list[dict]]:
     """Optionally pip-install pinned comparison deps; return (available, skipped)."""
     def missing_mods() -> set[str]:
-        return {v.requires for v in VARIANTS
+        return {v.requires for v in variants
                 if v.requires and util.find_spec(v.requires) is None}
 
     missing = missing_mods()
@@ -228,7 +259,7 @@ def resolve_variants(no_install: bool) -> tuple[list[Variant], list[dict]]:
 
     still_missing = missing_mods()
     skipped, available = [], []
-    for v in VARIANTS:
+    for v in variants:
         if v.requires in still_missing:
             reason = (f"pip install failed: {install_error}" if install_error
                       else f"module {v.requires!r} not importable (--no-install)")
@@ -287,12 +318,13 @@ def bench_sync(v: Variant, warm: list[str], bulk: list[str], perc: list[str], p:
     gc.collect()
     gc.disable()
     try:
-        done, total, start = 0, 0, perf_counter_ns()
+        done, admitted, total, start = 0, 0, 0, perf_counter_ns()
         while done < len(bulk):
             chunk = bulk[done:done + BULK_CHUNK]
             t0 = perf_counter_ns()
             for key in chunk:
-                decider(key)
+                if decider(key):
+                    admitted += 1
             total += perf_counter_ns() - t0
             done += len(chunk)
             if perf_counter_ns() - start > p["bulk_cap_s"] * 1e9:
@@ -310,7 +342,7 @@ def bench_sync(v: Variant, warm: list[str], bulk: list[str], perc: list[str], p:
                 break
     finally:
         gc.enable()
-    return done, total, samples
+    return done, admitted, total, samples
 
 
 def bench_async(v: Variant, warm: list[str], bulk: list[str], perc: list[str], p: dict):
@@ -321,12 +353,13 @@ def bench_async(v: Variant, warm: list[str], bulk: list[str], perc: list[str], p
         gc.collect()
         gc.disable()
         try:
-            done, total, start = 0, 0, perf_counter_ns()
+            done, admitted, total, start = 0, 0, 0, perf_counter_ns()
             while done < len(bulk):
                 chunk = bulk[done:done + BULK_CHUNK]
                 t0 = perf_counter_ns()
                 for key in chunk:
-                    await decider(key)
+                    if await decider(key):
+                        admitted += 1
                 total += perf_counter_ns() - t0
                 done += len(chunk)
                 if perf_counter_ns() - start > p["bulk_cap_s"] * 1e9:
@@ -344,17 +377,18 @@ def bench_async(v: Variant, warm: list[str], bulk: list[str], perc: list[str], p
                     break
         finally:
             gc.enable()
-        return done, total, samples
+        return done, admitted, total, samples
     return asyncio.run(_run())
 
 
 def run_one(v: Variant, dist: str, keys: tuple[list[str], list[str], list[str]], p: dict) -> dict:
     warm, bulk, perc = keys
     fn = bench_sync if v.kind == "sync" else bench_async
-    done, total, samples = fn(v, warm, bulk, perc, p)
+    done, admitted, total, samples = fn(v, warm, bulk, perc, p)
     mean_ns = total / done if done else float("nan")
     ops_s = done / (total / 1e9) if total else 0.0
     return {"variant": v.name, "dist": dist, "bulk_n": done, "bulk_ns": total,
+            "admit_ratio": round(admitted / done, 4) if done else None,
             "mean_ns": round(mean_ns, 1), "ops_s": round(ops_s),
             "sample_n": len(samples), **_percentiles(samples)}
 
@@ -395,8 +429,8 @@ def read_rss_kb() -> int | None:
     return int(val.split()[0]) if val else None
 
 
-def rss_child_main(name: str, k: int) -> None:
-    v = VARIANTS_BY_NAME[name]
+def rss_child_main(name: str, k: int, profile: str) -> None:
+    v = {x.name: x for x in build_variants(profile)}[name]
     rss_before = read_rss_kb()
     # Keys are generated on the fly: the child holds only the limiter and its
     # own key storage, which is exactly what a real deployment would hold.
@@ -419,7 +453,7 @@ def rss_child_main(name: str, k: int) -> None:
                       "delta_kb": delta}))
 
 
-def rss_sweep(available: list[Variant], ks: tuple[int, ...]) -> list[dict]:
+def rss_sweep(available: list[Variant], ks: tuple[int, ...], profile: str) -> list[dict]:
     rows = []
     script = str(Path(__file__).resolve())
     for k in ks:
@@ -431,7 +465,8 @@ def rss_sweep(available: list[Variant], ks: tuple[int, ...]) -> list[dict]:
                              "note": "skipped (variant capped)"})
                 continue
             proc = subprocess.run(
-                [sys.executable, script, "--rss-child", v.name, str(k)],
+                [sys.executable, script, "--rss-child", v.name, str(k),
+                 "--profile", profile],
                 capture_output=True, text=True, timeout=3600)
             try:
                 row = json.loads(proc.stdout.strip().splitlines()[-1])
@@ -456,6 +491,7 @@ def aggregate(runs: list[dict]) -> dict:
         agg[(name, dist)] = {
             "mean_ns": median(r["mean_ns"] for r in rs),
             "ops_s": median(r["ops_s"] for r in rs),
+            "admit_ratio": median(r["admit_ratio"] for r in rs if r["admit_ratio"] is not None),
             "p50": median(r["p50"] for r in rs if r["p50"] is not None),
             "p95": median(r["p95"] for r in rs if r["p95"] is not None),
             "p99": median(r["p99"] for r in rs if r["p99"] is not None),
@@ -465,11 +501,13 @@ def aggregate(runs: list[dict]) -> dict:
     return agg
 
 
-def render_report(version: str, quick: bool, env: dict, p: dict,
+def render_report(version: str, quick: bool, profile: str, env: dict, p: dict,
                   available: list[Variant], agg: dict, guards: list[dict],
                   rss_rows: list[dict] | None, skipped: list[dict],
                   overhead_ns: int) -> str:
     title = f"dripline engine-level benchmark — {version}"
+    if profile == "tight":
+        title += " (TIGHT profile: instant capacity 1 — reject-dominated)"
     if quick:
         title += " (SMOKE --quick, not for publishing)"
     lines = [
@@ -503,8 +541,8 @@ def render_report(version: str, quick: bool, env: dict, p: dict,
             f"## Decision cost — {dist} keys "
             f"(K={p['k']:,}, offered {p['n']:,}, warmup {p['warmup']:,})",
             "",
-            "| variant | mean ns/dec | p50 ns | p95 ns | p99 ns | ops/s | bulk n |",
-            "|---|---:|---:|---:|---:|---:|---:|",
+            "| variant | mean ns/dec | p50 ns | p95 ns | p99 ns | ops/s | admits | bulk n |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for v in available:
             a = agg.get((v.name, dist))
@@ -514,7 +552,8 @@ def render_report(version: str, quick: bool, env: dict, p: dict,
                       else f"{p['n']:,}")
             lines.append(
                 f"| {v.label} | {a['mean_ns']:,.0f} | {a['p50']:,} | {a['p95']:,} "
-                f"| {a['p99']:,} | {a['ops_s']:,.0f} | {n_cell} |")
+                f"| {a['p99']:,} | {a['ops_s']:,.0f} | {a['admit_ratio'] * 100:.1f}% "
+                f"| {n_cell} |")
 
     lines += [
         "",
@@ -567,9 +606,20 @@ def render_report(version: str, quick: bool, env: dict, p: dict,
         "  measured, identical across variants) and reuses the bulk limiter, so sampled",
         "  calls are steady-state, not first-touch. Subtract the no-op row for net cost.",
         "- GC is disabled during timed regions; limiter state is fresh per run.",
+    ]
+    if profile == "default":
+        lines += [
         "- Configurations are each library's idiomatic '1000 per minute' — burst semantics",
         "  differ (see table); the comparison is cost at equivalent offered load, not",
         "  admission-pattern equality.",
+        ]
+    else:
+        lines += [
+        "- TIGHT profile: every engine configured for instant capacity 1 (dripline",
+        "  10/min burst 1; limits 1/minute; aiolimiter 1 per 60 s), so the bulk pass",
+        "  measures the REJECT path — the admits column proves how dominated it is.",
+        ]
+    lines += [
         "- aiolimiter has no sync path and no per-key mode: its rows measure one",
         "  AsyncLimiter per client key, including await/event-loop overhead, which is",
         "  what using it for per-subscriber limiting actually costs.",
@@ -600,6 +650,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                     help="print the report, write nothing")
     ap.add_argument("--no-install", action="store_true",
                     help="don't pip-install missing comparison deps")
+    ap.add_argument("--profile", choices=("default", "tight"), default="default",
+                    help="default: idiomatic 1000/min; tight: capacity-1, reject-dominated")
     ap.add_argument("--rss-child", nargs=2, metavar=("VARIANT", "CLIENTS"),
                     help=argparse.SUPPRESS)
     return ap.parse_args(argv)
@@ -608,14 +660,15 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     args = parse_args(argv)
     if args.rss_child:
-        rss_child_main(args.rss_child[0], int(args.rss_child[1]))
+        rss_child_main(args.rss_child[0], int(args.rss_child[1]), args.profile)
         return 0
 
     p = dict(QUICK if args.quick else FULL)
     if args.runs:
         p["runs"] = args.runs
 
-    available, skipped = resolve_variants(args.no_install)
+    variants = build_variants(args.profile)
+    available, skipped = resolve_variants(variants, args.no_install)
     env = env_report(available)
 
     print("guards…", file=sys.stderr)
@@ -644,12 +697,12 @@ def main(argv=None) -> int:
     if not args.skip_rss:
         ks = p["rss_ks"] + ((FULL_RSS_EXTRA_K,) if args.full and not args.quick else ())
         print(f"rss sweep {ks}…", file=sys.stderr)
-        rss_rows = rss_sweep(available, ks)
+        rss_rows = rss_sweep(available, ks, args.profile)
 
     overhead_ns = timer_pair_overhead()
     agg = aggregate(runs)
-    report = render_report(args.version, args.quick, env, p, available, agg,
-                           guards, rss_rows, skipped, overhead_ns)
+    report = render_report(args.version, args.quick, args.profile, env, p, available,
+                           agg, guards, rss_rows, skipped, overhead_ns)
     print(report)
 
     if args.dry_run or args.quick:

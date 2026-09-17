@@ -23,6 +23,10 @@ docker run --rm \
   raw log, never silently dropped).
 - Key distributions: uniform, and Zipf (skewed — a few hot clients, long tail),
   because real traffic is skewed.
+- Profiles: `default` (idiomatic 1000/min, admit-dominated) and
+  `--profile tight` (instant capacity 1 for every engine, reject-dominated;
+  the report's `admits` column proves the mix). Results land in
+  `vX.Y.md` / `vX.Y.tight.md` respectively.
 
 ## What we measure
 
