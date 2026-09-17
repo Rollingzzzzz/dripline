@@ -92,3 +92,26 @@ docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-sli
 docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
   python /bench/bench/scenario.py --scenario tight   # merges into the same report
 ```
+
+## Fast vs release protocol
+
+Iteration must be cheap; published numbers must be steady. Two modes, same
+harnesses:
+
+| | fast (default) | release (`--release`) |
+|---|---|---|
+| runs/cell | ≥3, sequential stop when run-means agree within 5% | 7, fixed |
+| warmup / samples | 30k / 100k | 100k / 200k |
+| bulk / percall caps | 1.5 s / 1.0 s | 4 s / 2 s |
+| RSS sweep Ks | 10k, 100k, 1M | 1k, 10k, 100k, 1M (+10M with `--full`) |
+| scenario duration | 20 s (2 window rolls) | 60 s |
+| output files | `vX.Y.*.fast.md` | canonical `vX.Y.*.md` |
+
+Justification (measured on this repo's own raw data, 2026-09-17):
+- Within a session, a 3-run median deviated from the 7-run median by at most
+  **2.6%** across all 20 decision-cost cells (most ≤2%).
+- Cross-session validation (fast run vs release run, separate containers):
+  **no ranking changed**, per-cell values stayed within ±15% worst-case
+  (mostly ≤±10%); scenario totals within ±5.6%. The claims this suite makes
+  are about 2×–17× differences, an order of magnitude above fast-mode drift.
+Release protocol stays mandatory for version tags (`CONVENTIONS` rule 4).

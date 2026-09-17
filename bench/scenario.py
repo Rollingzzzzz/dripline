@@ -35,7 +35,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 WORKERS = 4
 CLIENTS = 100
-DURATION_S = 60.0
+DURATION_S = 60.0        # release protocol
+FAST_DURATION_S = 20.0   # fast default: 2 window rolls, millions of decisions
 BLOCK = 1000          # decisions between deadline checks (clock cost amortized)
 
 SCENARIOS = {
@@ -242,6 +243,10 @@ def render(version: str, results: list[dict], env: dict, params: dict) -> str:
         "",
         "- Worker count = core count; every engine faces the identical client cycle",
         "  and duration. Driver clock checks are amortized (1 per 1000 decisions).",
+        (f"- This ran the FAST protocol ({params['duration']:.0f} s per scenario); version"
+         if params["duration"] < DURATION_S else
+         f"- Release protocol ({params['duration']:.0f} s per scenario); fast runs"
+         " use 20 s"),
         "- governor runs the same scenario via its --scenario-worker mode: identical",
         "  quota semantics (unit period = window/amount, capacity = burst).",
         "- This is throughput + budget compliance under sustained load, not per-call",
@@ -253,7 +258,12 @@ def render(version: str, results: list[dict], env: dict, params: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--scenario", choices=("loose", "tight", "both"), default="both")
-    ap.add_argument("--duration", type=float, default=DURATION_S)
+    ap.add_argument("--duration", type=float, default=None,
+                    help="override duration (default: fast 20 s, release 60 s)")
+    ap.add_argument("--release", action="store_true",
+                    help="release protocol: 60 s scenarios, canonical "
+                         "vX.Y.scenario.md output (default: fast 20 s, "
+                         "vX.Y.scenario.fast.md)")
     ap.add_argument("--workers", type=int, default=WORKERS)
     ap.add_argument("--version", default="v0.1")
     ap.add_argument("--quick", action="store_true", help="3 s smoke, no files")
@@ -267,6 +277,8 @@ def main() -> int:
 
     if args.quick:
         args.duration, args.workers = 3.0, 2
+    if args.duration is None:
+        args.duration = DURATION_S if args.release else FAST_DURATION_S
     SCENARIOS["loose"]["ceiling"] = 1000 + 100 * args.duration
     SCENARIOS["tight"]["ceiling"] = 10 + 1 * args.duration
 
@@ -305,9 +317,10 @@ def main() -> int:
                      "duration": args.duration})
     print(report)
     if not args.quick:
+        suffix = "" if args.release else ".fast"
         out = ROOT / "bench" / "results"
         out.mkdir(exist_ok=True)
-        raw_path = out / f"{args.version}.scenario.raw.json"
+        raw_path = out / f"{args.version}.scenario{suffix}.raw.json"
         if raw_path.exists():
             # Merge with previously run scenarios so loose/tight can run as
             # separate invocations yet land in one report.
@@ -320,13 +333,13 @@ def main() -> int:
                                  "duration": args.duration})
             except (OSError, json.JSONDecodeError):
                 pass
-        (out / f"{args.version}.scenario.md").write_text(report, encoding="utf-8")
-        (out / f"{args.version}.scenario.raw.json").write_text(
+        (out / f"{args.version}.scenario{suffix}.md").write_text(report, encoding="utf-8")
+        (raw_path).write_text(
             json.dumps({"env": env, "params": {"workers": args.workers,
                                                "clients": CLIENTS,
                                                "duration": args.duration},
                         "results": results}, indent=1), encoding="utf-8")
-        print(f"wrote bench/results/{args.version}.scenario.md (+ raw json)",
+        print(f"wrote bench/results/{args.version}.scenario{suffix}.md (+ raw json)",
               file=sys.stderr)
     return 0
 
