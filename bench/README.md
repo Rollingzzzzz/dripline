@@ -75,3 +75,20 @@ docker run --rm -v "${PWD}:/bench" python:3.12-slim \
 
 Results land in `bench/results/vX.Y.champions.md`; champion work files are
 build artifacts and stay untracked.
+
+## Scenario benchmark (`bench/scenario.py`)
+
+The standing scoreboard format for every version: one machine, multiple cores
+(worker processes = pinned cores, each with its own limiter — the Redis-less
+deployment model), max-speed load for 60 s per scenario against 100 clients
+round-robin. Two fixed scenarios: **loose** (1000 admits / 10 s per client)
+and **tight** (10 admits / 10 s per client, reject-dominated). Rows: dripline,
+Python rivals (limits engine x2, aiolimiter), Rust governor. Reports total
+sustained decisions/s plus admit counts (budget compliance evidence).
+
+```bash
+docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
+  python /bench/bench/scenario.py --scenario loose
+docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
+  python /bench/bench/scenario.py --scenario tight   # merges into the same report
+```

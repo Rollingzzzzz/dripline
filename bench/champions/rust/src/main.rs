@@ -124,12 +124,60 @@ fn rss_child(k: i64) {
     );
 }
 
+fn scenario_worker(rate: f64, burst: u32, period_s: f64, duration_s: f64, clients: usize) {
+    // governor: the quota's unit period = window / amount, capacity = burst.
+    let unit_period = std::time::Duration::from_secs_f64(period_s / rate);
+    let quota = Quota::with_period(unit_period)
+        .expect("period")
+        .allow_burst(NonZeroU32::new(burst).unwrap());
+    let lim: RateLimiter<String, _, _> = RateLimiter::dashmap(quota);
+    let keys: Vec<String> = (0..clients).map(|i| format!("c{}", i)).collect();
+
+    let start = Instant::now();
+    let deadline = start + std::time::Duration::from_secs_f64(duration_s);
+    let mut decisions: u64 = 0;
+    let mut admits: u64 = 0;
+    let mut idx: usize = 0;
+    while Instant::now() < deadline {
+        for _ in 0..1000 {
+            if lim.check_key(&keys[idx]).is_ok() {
+                admits += 1;
+            }
+            decisions += 1;
+            idx = (idx + 1) % keys.len();
+        }
+    }
+    let elapsed = start.elapsed().as_secs_f64();
+    println!(
+        "{}",
+        serde_json::json!({
+            "decisions": decisions,
+            "admits": admits,
+            "admit_ratio": admits as f64 / decisions as f64,
+            "dec_per_s": decisions as f64 / elapsed,
+            "elapsed_s": elapsed,
+        })
+    );
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--rss-child") {
         let pos = args.iter().position(|a| a == "--rss-child").unwrap();
         let k: i64 = args[pos + 1].parse().expect("K");
         rss_child(k);
+        return;
+    }
+    if args.iter().any(|a| a == "--scenario-worker") {
+        // --scenario-worker RATE BURST PERIOD_S DURATION_S CLIENTS
+        // RATE = allowance amount per PERIOD_S (e.g. 1000 per 10 s), BURST = bank.
+        let pos = args.iter().position(|a| a == "--scenario-worker").unwrap();
+        let rate: f64 = args[pos + 1].parse().expect("rate");
+        let burst: u32 = args[pos + 2].parse().expect("burst");
+        let period_s: f64 = args[pos + 3].parse().expect("period");
+        let duration_s: f64 = args[pos + 4].parse().expect("duration");
+        let clients: usize = args[pos + 5].parse().expect("clients");
+        scenario_worker(rate, burst, period_s, duration_s, clients);
         return;
     }
     let keys_dir = args
