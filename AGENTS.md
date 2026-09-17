@@ -5,6 +5,7 @@
 ```bash
 # smoke tests (no dependencies needed)
 PYTHONPATH=src python tests/test_core.py
+PYTHONPATH=src python tests/test_arena.py
 
 # full test suite
 PYTHONPATH=src python -m pytest tests/
@@ -25,5 +26,9 @@ docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" python:3.12-slim 
 
 ## Current state
 
-v0.0.1: scalar GCRA core (`src/dripline/core.py`) + smoke tests. Next milestone
-is v0.1: decorator + ASGI middleware + first benchmark table.
+Branch v0.2: fixed mmap slot arena (`src/dripline/arena.py`) on top of the
+scalar GCRA core — shared across workers via one file, self-ageing recycling,
+flat RSS, fp-cache hot path, NumPy stats behind `dripline[numpy]`. Standing
+verification rule: every core change re-runs the scenario scoreboard before
+commit (bench/README.md). Still open from v0.1: decorator + ASGI middleware;
+then v0.3 clock-free mode.

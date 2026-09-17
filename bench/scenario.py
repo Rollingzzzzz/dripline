@@ -3,9 +3,9 @@
 
 The standing format for every version: ONE multi-process test, TWO rate
 settings on 10-second windows (loose 1000/10 s, tight 10/10 s), THREE repeats
-each — engines: dripline (pure Python) vs Python rivals (limits fixed-window,
-aiolimiter) vs the Rust champion (governor, always present). Headline metric:
-how close is dripline to governor.
+each — engines: dripline (dict core + shared mmap arena) vs Python rivals
+(limits fixed-window, aiolimiter) vs the Rust champion (governor, always
+present). Headline metric: how close is dripline to governor.
 
 Topology (the Redis-less deployment model): W worker processes, each with its
 OWN limiter instance, running simultaneously on pinned cores. We report total
@@ -27,6 +27,7 @@ import os
 import platform
 import subprocess
 import sys
+import tempfile
 import time
 from importlib import util
 from pathlib import Path
@@ -54,8 +55,10 @@ SCENARIOS = {
         aiolimiter=(10, 10), ceiling=10 + (10 / 10) * DURATION_S),
 }
 
-ENGINE_ORDER = ["no-op-floor", "dripline-gcra", "limits-fixed-window",
-                "aiolimiter-perkey", "governor-rust"]
+ENGINE_ORDER = ["no-op-floor", "dripline-gcra", "dripline-arena",
+                "limits-fixed-window", "aiolimiter-perkey", "governor-rust"]
+
+ARENA_SLOTS = 1024          # 100 clients → collision-free by a wide margin
 
 
 def decider_for(engine: str, sc: dict):
@@ -67,6 +70,13 @@ def decider_for(engine: str, sc: dict):
         from dripline import GcraLimiter
         rate, burst = sc["dripline"]
         lim = GcraLimiter(rate_per_second=rate, burst=burst)
+        return lambda key: lim.try_acquire(key).allowed
+    if engine == "dripline-arena":
+        from dripline import ArenaGcraLimiter
+        rate, burst = sc["dripline"]
+        lim = ArenaGcraLimiter(rate_per_second=rate, burst=burst,
+                               slots=ARENA_SLOTS,
+                               path=os.environ.get("DRIPLINE_ARENA_PATH"))
         return lambda key: lim.try_acquire(key).allowed
     if engine in ("limits-fixed-window", "limits-moving-window"):
         from limits import parse
@@ -140,20 +150,42 @@ def rust_bin() -> Path | None:
 def run_engine(engine: str, scenario_name: str, duration: float,
                workers: int, bin_path: Path | None) -> dict:
     sc = SCENARIOS[scenario_name]
+    arena_path = None
     if engine == "governor-rust":
         cmd = [str(bin_path), "--scenario-worker", str(sc["rate_per_period"]),
                str(sc["burst"]), str(sc["period_s"]), str(duration), str(CLIENTS)]
     else:
         cmd = [sys.executable, str(Path(__file__).resolve()), "--worker",
                engine, scenario_name, str(duration)]
-    procs = [subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              text=True) for _ in range(workers)]
-    rows = []
-    for p in procs:
-        out, err = p.communicate(timeout=duration + 120)
-        if p.returncode != 0:
-            raise RuntimeError(f"{engine} worker failed: {err.strip()[:200]}")
-        rows.append(json.loads(out.strip().splitlines()[-1]))
+        if engine == "dripline-arena":
+            # One arena file per (engine, repeat) run: every worker maps the
+            # same file, so budgets are global — the v0.2 deployment model.
+            fd, arena_path = tempfile.mkstemp(prefix="dripline-arena-",
+                                              suffix=".bin")
+            os.close(fd)
+    env = None
+    if arena_path is not None:
+        env = {**os.environ, "DRIPLINE_ARENA_PATH": arena_path}
+    try:
+        procs = [subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  text=True, env=env) for _ in range(workers)]
+    except Exception:
+        if arena_path is not None:
+            os.unlink(arena_path)
+        raise
+    try:
+        rows = []
+        for p in procs:
+            out, err = p.communicate(timeout=duration + 120)
+            if p.returncode != 0:
+                raise RuntimeError(f"{engine} worker failed: {err.strip()[:200]}")
+            rows.append(json.loads(out.strip().splitlines()[-1]))
+    finally:
+        if arena_path is not None:
+            for p in procs:   # workers exit before communicate() returns; belt+braces
+                if p.poll() is None:
+                    p.kill()
+            os.unlink(arena_path)
     total_dec = sum(r["decisions"] for r in rows)
     total_adm = sum(r["admits"] for r in rows)
     worst_admits_per_client = max(r["admits"] for r in rows) / CLIENTS
@@ -176,9 +208,11 @@ def render(version: str, results: list[dict], env: dict, params: dict) -> str:
         "ONE multi-process test · two rate settings on 10-second windows · "
         f"{params['repeats']} repeats each, median highlighted. Engines: dripline",
         "(pure Python) → Python rivals → **governor (Rust, always present)**.",
-        f"{params['workers']} worker processes, each with its OWN limiter (the Redis-less",
-        f"deployment model), {params['workers']} pinned cores, {params['clients']} clients",
-        f"round-robin per worker, max-speed load for {params['duration']:.0f} s per repeat.",
+        f"{params['workers']} worker processes on {params['workers']} pinned cores, "
+        f"{params['clients']} clients round-robin per worker, max-speed load for "
+        f"{params['duration']:.0f} s per repeat. Rivals hold one private limiter "
+        "per worker (the classic Redis-less model); dripline-arena workers map "
+        "ONE shared arena file (the v0.2 model) — per-client budgets are global.",
         "",
         f"Environment: {env['python']} · {env['cpu']} · {env['platform']}",
         "",
@@ -228,7 +262,13 @@ def render(version: str, results: list[dict], env: dict, params: dict) -> str:
                 cells += [f"{r['total_dec_per_s']:,}", f"{pct:.0f}%"]
         lines.append(f"| {cells[0]} | " + " | ".join(cells[1:]) + " |")
 
-    ours = summary.get("dripline-gcra", {}).get("loose")
+    dripline_engines = [e for e in ENGINE_ORDER if e.startswith("dripline")
+                        and summary.get(e)]
+    ours = None
+    for e in dripline_engines:  # best dripline storage facing the rivals
+        r = summary.get(e, {}).get("loose")
+        if r and (ours is None or r["total_dec_per_s"] > ours["total_dec_per_s"]):
+            ours = r
     best_py = None
     for e in ("aiolimiter-perkey", "limits-fixed-window"):
         r = summary.get(e, {}).get("loose")
@@ -236,14 +276,15 @@ def render(version: str, results: list[dict], env: dict, params: dict) -> str:
             best_py = r
     lines += ["", "Positioning:", ""]
     for name in ("loose", "tight"):
-        o, gov = (summary.get("dripline-gcra", {}).get(name),
-                  summary.get("governor-rust", {}).get(name))
-        if o and gov:
-            lines.append(f"- {name.upper()}: dripline is at "
-                         f"**{o['total_dec_per_s'] / gov['total_dec_per_s'] * 100:.0f}%** "
-                         f"of governor ({gov['total_dec_per_s'] / o['total_dec_per_s']:.1f}x gap)")
+        gov = summary.get("governor-rust", {}).get(name)
+        for e in dripline_engines:
+            o = summary.get(e, {}).get(name)
+            if o and gov:
+                lines.append(f"- {name.upper()}: {e} is at "
+                             f"**{o['total_dec_per_s'] / gov['total_dec_per_s'] * 100:.0f}%** "
+                             f"of governor ({gov['total_dec_per_s'] / o['total_dec_per_s']:.1f}x gap)")
     if ours and best_py:
-        lines.append(f"- vs best Python rival ({best_py['engine']}): "
+        lines.append(f"- best dripline vs best Python rival ({best_py['engine']}): "
                      f"**{ours['total_dec_per_s'] / best_py['total_dec_per_s']:.2f}x**")
     lines += [
         "",
@@ -251,14 +292,18 @@ def render(version: str, results: list[dict], env: dict, params: dict) -> str:
         "",
         "- Worker count = core count; every engine faces the identical client cycle",
         "  and duration. Driver clock checks are amortized (1 per 1000 decisions).",
-        (f"- This ran the FAST protocol ({params['duration']:.0f} s per scenario); version"
+        (f"- FAST protocol ({params['duration']:.0f} s per repeat); release runs use "
+         f"{DURATION_S:.0f} s"
          if params["duration"] < DURATION_S else
-         f"- Release protocol ({params['duration']:.0f} s per scenario); fast runs"
-         " use 20 s"),
+         f"- Release protocol ({params['duration']:.0f} s per repeat)"),
         "- governor runs the same scenario via its --scenario-worker mode: identical",
         "  quota semantics (unit period = window/amount, capacity = burst).",
         "- This is throughput + budget compliance under sustained load, not per-call",
         "  latency (that lives in run.py / champions tables).",
+        "- Reading the admits column: per-worker engines each enforce their own",
+        "  copy, so their TOTAL admits run ~Wx the per-client ceiling; the",
+        "  shared-arena row enforces the global budget (~1x ceiling) — the xW",
+        "  over-admission the arena exists to fix.",
     ]
     return "\n".join(lines) + "\n"
 

@@ -110,6 +110,22 @@ ship as-is if it lowers dripline's share of governor's sustained throughput,
 or breaks budget compliance (admits per client above the ceiling). Release
 protocol (`--release`) is re-run for version tags on top of this.
 
+## Arena exit measurements (`bench/arena_smoke.py`)
+
+The v0.2 roadmap exit criteria in one run: RSS vs client count through a
+fixed 12M-slot arena (flat at the pre-allocated cap), a 10M-client churn
+through a 1M-slot arena (10× oversubscribed — RSS pinned, an actively
+hammered client still inside its exact GCRA bound, proving active slots are
+never recycled), and the 100-admit correctness guard.
+
+```bash
+docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
+  python /bench/bench/arena_smoke.py
+```
+
+Results land in `bench/results/v0.2.arena.md`; the dict-core reference at 1M
+clients gives the memory scale (the 10M dict point is deliberately not run).
+
 ## Fast vs release protocol
 
 Iteration must be cheap; published numbers must be steady. Two modes, same

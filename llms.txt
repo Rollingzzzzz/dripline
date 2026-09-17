@@ -10,7 +10,7 @@ One machine (or a few), 2–8 ASGI workers, 10^4–10^7 distinct clients, and no
 desire to run Redis just for counting. Smaller: a plain dict limiter suffices.
 Larger/multi-region exactness: keep Redis at the center.
 
-## Core API (v0.0.1, stable arithmetic — sugar lands in v0.1)
+## Core API (stable arithmetic — sugar lands with the middleware)
 
 ```python
 from dripline import GcraLimiter
@@ -26,6 +26,34 @@ Algorithm: GCRA. One integer per client (earliest admissible time, monotonic
 ns). Admit pushes it one interval forward; it may lead the clock by at most
 `burst` intervals; rejects are free and return an exact retry hint. No timers,
 no cleanup, no resets.
+
+## Arena API (v0.2 — fixed footprint, shared across workers)
+
+```python
+from dripline import ArenaGcraLimiter
+
+lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100,
+                       slots=1_000_000)              # 32 MiB, fixed forever
+decision = lim.try_acquire("client-id")              # same Decision, same math
+
+# multi-worker: every process opens the SAME file — budgets become global
+lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100,
+                       slots=1_000_000, path="/run/dripline.arena")
+
+lim.stats()          # occupancy/activity — one NumPy pass (dripline[numpy])
+lim.close()          # or use as a context manager
+```
+
+Storage: a pre-allocated table of 32-byte slots inside an mmap region — TAT +
+stable blake2b fingerprint + two reserved words. Placement is identical in
+every process (same key → same slot). Idle clients drain on their own; a
+drained slot is indistinguishable from a fresh client, so newcomers recycle
+it: RSS never exceeds `slots × 32 bytes` no matter how many clients pass
+through. A fixed direct-mapped fingerprint cache keeps the hot path at
+hash → one verified slot touch; blake2b runs only on first sight of a key.
+Honest bounds: concurrent same-slot writes can lose an update (±1 permit);
+an over-subscribed table shares fate at the home bucket — approximate, never
+exact.
 
 ## Properties
 

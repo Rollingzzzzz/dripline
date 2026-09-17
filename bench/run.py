@@ -105,6 +105,19 @@ def _make_dripline(rate_per_second: float, burst: int) -> Callable[[], Callable[
     return factory
 
 
+def _make_dripline_arena(rate_per_second: float, burst: int,
+                         slots: int) -> Callable[[], Callable[[str], bool]]:
+    def factory() -> Callable[[str], bool]:
+        from dripline import ArenaGcraLimiter
+        lim = ArenaGcraLimiter(rate_per_second=rate_per_second, burst=burst,
+                               slots=slots)
+
+        def decide(key: str) -> bool:
+            return lim.try_acquire(key).allowed
+        return decide
+    return factory
+
+
 def _make_limits(strategy: str, rate_str: str) -> Callable[[], Callable[[str], bool]]:
     def factory() -> Callable[[str], bool]:
         from limits import parse
@@ -157,6 +170,11 @@ def build_variants(profile: str) -> list[Variant]:
             Variant("dripline-gcra", "dripline GCRA", "GCRA, one int per client",
                     "1000/min, burst 100", "sync", _make_dripline(1000 / 60, 100),
                     guard_capacity=100),
+            Variant("dripline-arena", "dripline arena (mmap)",
+                    "GCRA, fixed 32-B slot arena",
+                    "1000/min, burst 100, 2M slots", "sync",
+                    _make_dripline_arena(1000 / 60, 100, 2_000_000),
+                    guard_capacity=100, max_rss_k=1_000_000),
             Variant("limits-fixed-window", "slowapi engine (limits) — fixed window",
                     "fixed window", "1000/minute", "sync", _make_limits("fixed", "1000/minute"),
                     requires="limits", guard_capacity=1000, max_rss_k=1_000_000),
@@ -175,6 +193,11 @@ def build_variants(profile: str) -> list[Variant]:
         Variant("dripline-gcra", "dripline GCRA", "GCRA, one int per client",
                 "10/min, burst 1 (capacity 1)", "sync", _make_dripline(10 / 60, 1),
                 guard_capacity=1),
+        Variant("dripline-arena", "dripline arena (mmap)",
+                "GCRA, fixed 32-B slot arena",
+                "10/min, burst 1, 2M slots", "sync",
+                _make_dripline_arena(10 / 60, 1, 2_000_000),
+                guard_capacity=1, max_rss_k=1_000_000),
         Variant("limits-fixed-window", "slowapi engine (limits) — fixed window",
                 "fixed window", "1/minute", "sync", _make_limits("fixed", "1/minute"),
                 requires="limits", guard_capacity=1, max_rss_k=1_000_000),
