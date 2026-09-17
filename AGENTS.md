@@ -10,6 +10,9 @@ PYTHONPATH=src python tests/test_arena.py
 # full test suite
 PYTHONPATH=src python -m pytest tests/
 
+# lint — MUST pass before every commit (config: [tool.ruff] in pyproject.toml)
+ruff check .
+
 # benchmarks (pinned environment — see bench/README.md)
 docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" python:3.12-slim python /bench/bench/run.py
 ```

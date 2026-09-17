@@ -14,3 +14,5 @@ Working rules for this repository. Short on purpose.
 6. **No secrets, ever.** Scan the staged diff before every push.
 7. **Private until v0.1 + benchmarks.** Flipping the repo public is a deliberate release
    decision made by the owner, together with the announcement.
+8. **Lint is part of done.** `ruff check .` must pass before every commit; the rule
+   set and line length live in `pyproject.toml` under `[tool.ruff]`.

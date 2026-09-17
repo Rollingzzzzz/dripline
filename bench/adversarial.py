@@ -25,6 +25,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import UTC
 from importlib import metadata, util
 from pathlib import Path
 
@@ -155,7 +156,8 @@ def spawn_worker(name: str, key: str, fires: int, redis_uri: str | None) -> int:
 # A+B: workers multiply allowances? does a restart remember?
 # --------------------------------------------------------------------------- #
 
-def exp_workers(eng: list[dict], redis_uri: str | None, w: int = 4) -> tuple[list[dict], list[dict]]:
+def exp_workers(eng: list[dict], redis_uri: str | None,
+                w: int = 4) -> tuple[list[dict], list[dict]]:
     rows_a, rows_b = [], []
     stamp = time.strftime("%H%M%S")
     for i, e in enumerate(eng):
@@ -247,7 +249,7 @@ def exp_stale_memory(k: int, rehit: int) -> list[dict] | None:
         else:
             # One event loop session: AsyncLimiter instances must not cross loops,
             # and the limiter dict must stay referenced while RSS is read.
-            async def _session() -> None:
+            async def _session(e: dict) -> None:
                 nonlocal rss_full, rss_end
                 decider = e["make"]()
                 for i in range(k):
@@ -258,7 +260,7 @@ def exp_stale_memory(k: int, rehit: int) -> list[dict] | None:
                     await decider(f"c{i}")
                 gc.collect()
                 rss_end = _read_rss_kb()
-            asyncio.run(_session())
+            asyncio.run(_session(e))
         rows.append({"variant": e["label"], "clients": k, "rehit": rehit,
                      "rss_full_kb": rss_full, "rss_end_kb": rss_end,
                      "returned_kb": rss_full - rss_end})
@@ -272,10 +274,11 @@ def exp_stale_memory(k: int, rehit: int) -> list[dict] | None:
 # --------------------------------------------------------------------------- #
 
 def exp_threads() -> list[dict]:
-    from dripline import GcraLimiter
     from limits import parse
     from limits.storage import MemoryStorage
     from limits.strategies import FixedWindowRateLimiter, MovingWindowRateLimiter
+
+    from dripline import GcraLimiter
     cap = 100
 
     cases = {"dripline GCRA (dict)": None,
@@ -298,11 +301,12 @@ def exp_threads() -> list[dict]:
     for label, decide in cases.items():
         counts = [0] * THREADS
 
-        def hammer(idx: int) -> None:
+        def hammer(idx: int, decide, counts) -> None:
             for _ in range(THREAD_FIRES):
                 if decide():
                     counts[idx] += 1
-        threads = [threading.Thread(target=hammer, args=(i,)) for i in range(THREADS)]
+        threads = [threading.Thread(target=hammer, args=(i, decide, counts))
+                   for i in range(THREADS)]
         for t in threads:
             t.start()
         for t in threads:
@@ -358,8 +362,9 @@ def render(version: str, env: dict, a: list, b: list, c: list | None, d: list) -
     ]
     if c is not None:
         lines += [
-            "## C. Stale clients: does anyone return memory? (short-window configs,",
-            f"{STALE_SLEEP_S}s idle so all state is provably expired, then {STALE_REHIT:,} re-hits)",
+            "## C. Stale clients: does anyone return memory? (short-window",
+            f"configs, {STALE_SLEEP_S}s idle so all state is provably expired,",
+            f"then {STALE_REHIT:,} re-hits)",
             "",
             "| variant | RSS full (kB) | RSS after expiry+re-hits (kB) | returned (kB) |",
             "|---|---:|---:|---:|",
@@ -432,8 +437,8 @@ def main(argv=None) -> int:
         subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "-r",
                         str(ROOT / "bench" / "requirements.txt")], check=True)
 
-    from datetime import datetime, timezone
-    env = {"generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    from datetime import datetime
+    env = {"generated_utc": datetime.now(UTC).isoformat(timespec="seconds"),
            "python": platform.python_version(), "platform": platform.platform(),
            "versions": {m: metadata.version(m) for m in ("limits", "aiolimiter", "redis")
                         if util.find_spec(m)}}

@@ -2,7 +2,7 @@
 
 The admission arithmetic is byte-for-byte the one in :mod:`dripline.core`;
 only the storage changes. Instead of a dict that grows forever, the arena is
-one pre-allocated table of 32-byte slots (4 × int64 words) inside an
+one pre-allocated table of 32-byte slots (4 x int64 words) inside an
 ``mmap`` region:
 
     word 0  TAT          earliest admit time (monotonic ns) — the GCRA state
@@ -14,7 +14,7 @@ Three properties fall out of that layout:
 
 **Shared across workers (no Redis).** With ``path=`` the arena is a
 file-backed shared mapping: every worker process opens the same file and the
-counters are global, not per-worker — the ×W over-admission of per-worker
+counters are global, not per-worker — the xW over-admission of per-worker
 limiters disappears. Concurrent read-modify-write on one slot from two
 workers can lose an update; the overshoot is bounded (one permit per race,
 the same ±1 class as in-process races, listed under honest limitations).
@@ -24,7 +24,7 @@ no cleanup thread and no eviction job. A slot whose TAT has fallen behind
 the clock is fully drained — for GCRA that is *identical* to a fresh client
 (max(now, S) restarts from now) — so any newcomer may claim it. Writing is
 deleting: active clients keep their slots hot, idle ones are reclaimed by
-the next newcomer, and RSS never exceeds ``slots × 32 bytes`` no matter how
+the next newcomer, and RSS never exceeds ``slots x 32 bytes`` no matter how
 many distinct clients pass through.
 
 **Stable placement.`` Built-in ``hash(str)`` is randomized per process and
@@ -37,7 +37,7 @@ drained slot is remembered as a claim candidate. No hit → claim the drained
 slot, or — if the window is full of active clients — share fate at the home
 bucket (overwrite the fingerprint, keep the TAT: the newcomer waits out the
 incumbent's lead, bounded by ``burst`` intervals). Sizing rule: keep the
-steady-state active-client count at ≤ 0.7 × slots and collisions become
+steady-state active-client count at ≤ 0.7 x slots and collisions become
 noise; the counting is approximate, never exact.
 """
 
@@ -46,7 +46,6 @@ from __future__ import annotations
 import mmap
 import os
 import time
-
 from array import array
 from hashlib import blake2b
 
@@ -54,7 +53,7 @@ from dripline.core import Decision
 
 __all__ = ["ArenaGcraLimiter"]
 
-SLOT_BYTES = 32          # 4 × int64: TAT, FINGERPRINT, reserved, reserved
+SLOT_BYTES = 32          # 4 x int64: TAT, FINGERPRINT, reserved, reserved
 MAX_PROBES = 16          # bounded probe window; beyond it, share fate
 
 
@@ -116,13 +115,15 @@ class ArenaGcraLimiter:
             self._cache_keys = None
         size = slots * SLOT_BYTES
         if path is None:
-            self._file = None
             self._mm = mmap.mmap(-1, size)
         else:
-            self._file = open(path, "a+b")   # create-or-open, never truncates down
-            if os.fstat(self._file.fileno()).st_size < size:
-                self._file.truncate(size)
-            self._mm = mmap.mmap(self._file.fileno(), size)  # shared map
+            # The handle is scoped to setup: the mapping stays valid after the
+            # handle closes on both POSIX and Windows (the recommended pattern
+            # for shared maps — other processes can open the file meanwhile).
+            with open(path, "a+b") as f:     # create-or-open, never truncates down
+                if os.fstat(f.fileno()).st_size < size:
+                    f.truncate(size)
+                self._mm = mmap.mmap(f.fileno(), size)  # shared map
         self._words = memoryview(self._mm).cast("q")
 
     # -- hot path ---------------------------------------------------------- #
@@ -218,10 +219,8 @@ class ArenaGcraLimiter:
     def close(self) -> None:
         self._words.release()
         self._mm.close()
-        if self._file is not None:
-            self._file.close()
 
-    def __enter__(self) -> "ArenaGcraLimiter":
+    def __enter__(self) -> ArenaGcraLimiter:
         return self
 
     def __exit__(self, *exc) -> None:

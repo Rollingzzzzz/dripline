@@ -36,7 +36,21 @@ dependencies = []
 [project.optional-dependencies]
 numpy = ["numpy>=1.26"]
 fastapi = ["fastapi>=0.110"]
-dev = ["pytest>=8", "httpx>=0.27"]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.16"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["bench/champions/rust", "bench/champions/work"]
+
+[tool.ruff.lint]
+# pycodestyle + pyflakes + isort + bugbear + pyupgrade + simplify + ruff-specific
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# bench/champions.py must insert repo paths into sys.path before importing
+# the local bench modules — module-level imports cannot sit at the top.
+"bench/champions.py" = ["E402"]
