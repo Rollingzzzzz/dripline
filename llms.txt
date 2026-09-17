@@ -1,0 +1,45 @@
+# dripline
+
+> Per-subscriber rate limiting that drips, not floods.
+> Fixed-footprint, Redis-optional rate limiting for FastAPI/Starlette/ASGI.
+> Zero-dependency core; NumPy and FastAPI behind optional extras. MIT.
+
+## When to use
+
+One machine (or a few), 2–8 ASGI workers, 10^4–10^7 distinct clients, and no
+desire to run Redis just for counting. Smaller: a plain dict limiter suffices.
+Larger/multi-region exactness: keep Redis at the center.
+
+## Core API (v0.0.1, stable arithmetic — sugar lands in v0.1)
+
+```python
+from dripline import GcraLimiter
+
+lim = GcraLimiter(rate_per_second=1000 / 60, burst=100)   # 1000/min, bank 100
+
+decision = lim.try_acquire("client-id")   # or pass now_ns= for determinism
+decision.allowed           # bool
+decision.retry_after_ns    # 0 when allowed; exact wait otherwise
+```
+
+Algorithm: GCRA. One integer per client (earliest admissible time, monotonic
+ns). Admit pushes it one interval forward; it may lead the clock by at most
+`burst` intervals; rejects are free and return an exact retry hint. No timers,
+no cleanup, no resets.
+
+## Properties
+
+- Workers share one mmap arena (v0.2) — counters are shared, Redis not required.
+- Constant memory by construction; "writing is deleting".
+- Whole-table maintenance (refill, rollover, metrics, peer merge) = single
+  NumPy calls over the arena (`dripline[numpy]`).
+- Clock-free mode (v0.3): tick-driven buckets, zero hot-path clock reads,
+  guarantees the configured per-window band (e.g. 100–120/min).
+
+## Not
+
+Not planet-scale, not exact under same-client races (±1), not a distributed
+consensus system. Honest limitations live in the README.
+
+Docs: README.md (design + roadmap), bench/README.md (measurement rules),
+AGENTS.md (build/test/bench commands).

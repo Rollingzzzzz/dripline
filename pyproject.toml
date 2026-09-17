@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dripline"
+version = "0.0.1"
+description = "Per-subscriber rate limiting that drips, not floods. Fixed-footprint, Redis-optional rate limiting for FastAPI/ASGI."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Rollingzzzzz" }]
+keywords = [
+  "rate limit",
+  "rate limiting",
+  "gcra",
+  "token bucket",
+  "fastapi",
+  "asgi",
+  "starlette",
+  "middleware",
+  "no redis",
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP :: Middleware",
+  "Topic :: System :: Networking :: Monitoring",
+]
+dependencies = []
+
+[project.optional-dependencies]
+numpy = ["numpy>=1.26"]
+fastapi = ["fastapi>=0.110"]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
