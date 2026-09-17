@@ -104,7 +104,7 @@ def churn_child(k: int, slots: int) -> None:
     mono0 = time.monotonic_ns()
     for i in range(k):
         lim.try_acquire(f"churn-{i}")
-        if i % stride == 0 and lim.try_acquire(active).allowed:
+        if i % stride == 0 and not lim.try_acquire(active):
             admitted += 1
     mono1 = time.monotonic_ns()
     gc.collect()
@@ -158,7 +158,7 @@ def main() -> int:
     # Budget guard (cheap, in-process).
     from dripline import ArenaGcraLimiter
     guard_lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100, slots=1024)
-    guard_allowed = sum(guard_lim.try_acquire("g").allowed for _ in range(300))
+    guard_allowed = sum(1 for _ in range(300) if not guard_lim.try_acquire("g"))
     guard_lim.close()
     guard_ok = guard_allowed == 100
 

@@ -48,7 +48,7 @@ def _dripline(capacity_hint: int):
     lim = GcraLimiter(rate_per_second=10, burst=capacity_hint)
 
     def decide(key: str) -> bool:
-        return lim.try_acquire(key).allowed
+        return not lim.try_acquire(key)
     return decide
 
 def _limits_memory(strategy: str):
@@ -287,7 +287,7 @@ def exp_threads() -> list[dict]:
 
     lim = GcraLimiter(rate_per_second=100 / 60, burst=cap)
 
-    def d_decide(): return lim.try_acquire("race").allowed
+    def d_decide(): return not lim.try_acquire("race")
     cases["dripline GCRA (dict)"] = d_decide
 
     for label, cls in (("limits fixed-window (memory)", FixedWindowRateLimiter),

@@ -1,8 +1,9 @@
-"""Smoke tests for the v0.2 mmap slot arena.
+"""Smoke tests for the v0.2 mmap slot arena (int-return hot path).
 
-Two groups: parity with the scalar core (same admission arithmetic, injected
-clock) and arena-specific contracts — shared budgets across instances on one
-file, self-ageing recycling, and bounded share-fate saturation.
+Two groups: parity with the scalar core (same admission arithmetic,
+injected clock) and arena-specific contracts — shared budgets across
+instances on one file, self-ageing recycling, and bounded share-fate
+saturation.
 """
 
 import tempfile
@@ -27,20 +28,21 @@ def test_parity_with_scalar_core():
 
 def test_burst_then_reject_then_drip():
     lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100, slots=64)
-    allowed = sum(lim.try_acquire("c", now_ns=T).allowed for _ in range(100))
+    allowed = sum(1 for _ in range(100)
+                  if lim.try_acquire("c", now_ns=T) == 0)
     assert allowed == 100
-    decision = lim.try_acquire("c", now_ns=T)  # 101st instant request
-    assert not decision.allowed
-    assert 50_000_000 <= decision.retry_after_ns <= 70_000_000
-    assert lim.try_acquire("c", now_ns=T + 60_000_000).allowed  # slot untouched by rejects
+    retry = lim.try_acquire("c", now_ns=T)  # 101st instant request
+    assert retry > 0
+    assert 50_000_000 <= retry <= 70_000_000
+    assert lim.try_acquire("c", now_ns=T + 60_000_000) == 0  # rejects touch nothing
 
 
 def test_clients_are_independent():
     lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100, slots=1024)
     for _ in range(100):
-        assert lim.try_acquire("a", now_ns=T).allowed
-    assert not lim.try_acquire("a", now_ns=T).allowed
-    assert lim.try_acquire("b", now_ns=T).allowed
+        assert lim.try_acquire("a", now_ns=T) == 0
+    assert lim.try_acquire("a", now_ns=T) > 0
+    assert lim.try_acquire("b", now_ns=T) == 0
 
 
 def test_shared_file_shares_budgets():
@@ -53,10 +55,10 @@ def test_shared_file_shares_budgets():
                                  path=path)
             try:
                 for _ in range(10):
-                    assert a.try_acquire("shared-client", now_ns=T).allowed
+                    assert a.try_acquire("shared-client", now_ns=T) == 0
                 # Worker b sees the budget worker a already spent.
-                assert not b.try_acquire("shared-client", now_ns=T).allowed
-                assert b.try_acquire("other-client", now_ns=T).allowed
+                assert b.try_acquire("shared-client", now_ns=T) > 0
+                assert b.try_acquire("other-client", now_ns=T) == 0
             finally:
                 b.close()
         finally:
@@ -67,10 +69,10 @@ def test_drained_slots_are_recycled():
     """A saturated-but-idle arena hands slots to newcomers (writing is deleting)."""
     lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100, slots=4)
     for i in range(4):  # every slot taken, TAT ~6 s ahead of T
-        assert lim.try_acquire(f"first-{i}", now_ns=T).allowed
+        assert lim.try_acquire(f"first-{i}", now_ns=T) == 0
     late = T + 10**12  # far beyond every TAT: all slots fully drained
     for i in range(8):  # newcomers must be admitted — recycled slots, no growth
-        assert lim.try_acquire(f"newcomer-{i}", now_ns=late).allowed
+        assert lim.try_acquire(f"newcomer-{i}", now_ns=late) == 0
 
 
 def test_saturation_shares_fate_bounded():
@@ -82,18 +84,17 @@ def test_saturation_shares_fate_bounded():
     """
     lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100, slots=2)
     for _ in range(100):  # both incumbents fully bank their burst
-        assert lim.try_acquire("a", now_ns=T).allowed
-        assert lim.try_acquire("b", now_ns=T).allowed
-    d = lim.try_acquire("c", now_ns=T)  # no drained slot anywhere → share fate
-    assert not d.allowed
-    assert 0 < d.retry_after_ns <= lim.period_ns
-    assert lim.try_acquire("c", now_ns=T + lim.burst_ns).allowed
+        assert lim.try_acquire("a", now_ns=T) == 0
+        assert lim.try_acquire("b", now_ns=T) == 0
+    retry = lim.try_acquire("c", now_ns=T)  # no drained slot anywhere → share fate
+    assert 0 < retry <= lim.period_ns
+    assert lim.try_acquire("c", now_ns=T + lim.burst_ns) == 0
 
 
 def test_idle_client_starts_fresh():
     lim = ArenaGcraLimiter(rate_per_second=1.0, burst=10, slots=64)
-    assert lim.try_acquire("a", now_ns=T).allowed
-    assert lim.try_acquire("a", now_ns=T + 10**12).allowed  # no stale stacking
+    assert lim.try_acquire("a", now_ns=T) == 0
+    assert lim.try_acquire("a", now_ns=T + 10**12) == 0  # no stale stacking
 
 
 def test_stats_needs_numpy_and_counts():

@@ -100,7 +100,7 @@ def _make_dripline(rate_per_second: float, burst: int) -> Callable[[], Callable[
         lim = GcraLimiter(rate_per_second=rate_per_second, burst=burst)
 
         def decide(key: str) -> bool:
-            return lim.try_acquire(key).allowed
+            return not lim.try_acquire(key)
         return decide
     return factory
 
@@ -113,7 +113,7 @@ def _make_dripline_arena(rate_per_second: float, burst: int,
                                slots=slots)
 
         def decide(key: str) -> bool:
-            return lim.try_acquire(key).allowed
+            return not lim.try_acquire(key)
         return decide
     return factory
 

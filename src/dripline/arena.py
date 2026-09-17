@@ -49,8 +49,6 @@ import time
 from array import array
 from hashlib import blake2b
 
-from dripline.core import Decision
-
 __all__ = ["ArenaGcraLimiter"]
 
 SLOT_BYTES = 32          # 4 x int64: TAT, FINGERPRINT, reserved, reserved
@@ -88,6 +86,9 @@ class ArenaGcraLimiter:
             blake2b runs only on first sight of a key. ``0`` disables it.
     """
 
+    __slots__ = ("_bp", "_burst_ns", "_cache_fp", "_cache_idx", "_cache_keys",
+                 "_cap", "_cmask", "_mm", "_now", "_period_ns", "_probes", "_words")
+
     def __init__(self, rate_per_second: float, burst: int = 1,
                  slots: int = 1_000_000, path: str | os.PathLike | None = None,
                  cache_slots: int = 131_072) -> None:
@@ -103,6 +104,8 @@ class ArenaGcraLimiter:
         if self._period_ns < 1:
             raise ValueError("rate too high for nanosecond resolution")
         self._burst_ns = self._period_ns * burst
+        self._bp = self._burst_ns - self._period_ns  # reject threshold, precomputed
+        self._now = time.monotonic_ns  # bound once; no module lookups per call
         self._cap = slots
         self._probes = min(MAX_PROBES, slots)
         if cache_slots:
@@ -128,11 +131,14 @@ class ArenaGcraLimiter:
 
     # -- hot path ---------------------------------------------------------- #
 
-    def try_acquire(self, key: str, now_ns: int | None = None) -> Decision:
-        """Check one request. ``now_ns`` injectable for deterministic tests."""
-        now = time.monotonic_ns() if now_ns is None else now_ns
+    def try_acquire(self, key: str, now_ns: int | None = None) -> int:
+        """Check one request: ``0`` = admitted, ``>0`` = exact wait in ns.
+
+        ``now_ns`` injectable for deterministic tests.
+        """
+        now = self._now() if now_ns is None else now_ns
         period = self._period_ns
-        burst = self._burst_ns
+        bp = self._bp
         w = self._words
         ck = self._cache_keys
         if ck is not None:
@@ -142,11 +148,14 @@ class ArenaGcraLimiter:
                 base = self._cache_idx[ci] * 4
                 if w[base + 1] == self._cache_fp[ci]:   # …still verified by fp
                     tat = w[base]
-                    new = (tat if tat > now else now) + period
-                    if new - now > burst:
-                        return Decision(False, new - burst - now)
-                    w[base] = new
-                    return Decision(True, 0)
+                    if tat > now:
+                        retry = tat - now - bp
+                        if retry > 0:
+                            return retry
+                        w[base] = tat + period
+                        return 0
+                    w[base] = now + period
+                    return 0
         fp = _fingerprint(key)
         cap = self._cap
         idx = home = fp % cap
@@ -172,11 +181,20 @@ class ArenaGcraLimiter:
             ck[ci] = h                     # self-healing — a stolen slot
             self._cache_idx[ci] = base // 4  # fails the fp verify next time
             self._cache_fp[ci] = fp
-        new = (tat if tat > now else now) + period
-        if new - now > burst:
-            return Decision(False, new - burst - now)
-        w[base] = new
-        return Decision(True, 0)
+        if tat > now:
+            retry = tat - now - bp
+            if retry > 0:
+                return retry
+            w[base] = tat + period
+            return 0
+        w[base] = now + period
+        return 0
+
+    def try_acquire_decision(self, key: str, now_ns: int | None = None):
+        """Explicit pair form of :meth:`try_acquire` (see :mod:`dripline.core`)."""
+        from dripline.core import Decision
+        retry = self.try_acquire(key, now_ns)
+        return Decision(False, retry) if retry else Decision(True, 0)
 
     # -- maintenance (whole-table, vectorized — needs the numpy extra) ----- #
 

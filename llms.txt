@@ -17,15 +17,19 @@ from dripline import GcraLimiter
 
 lim = GcraLimiter(rate_per_second=1000 / 60, burst=100)   # 1000/min, bank 100
 
-decision = lim.try_acquire("client-id")   # or pass now_ns= for determinism
-decision.allowed           # bool
-decision.retry_after_ns    # 0 when allowed; exact wait otherwise
+retry_ns = lim.try_acquire("client-id")   # or pass now_ns= for determinism
+retry_ns == 0              # admitted
+retry_ns > 0               # rejected: exact wait in nanoseconds
+
+d = lim.try_acquire_decision("client-id")   # explicit pair when preferred
+d.allowed, d.retry_after_ns
 ```
 
 Algorithm: GCRA. One integer per client (earliest admissible time, monotonic
 ns). Admit pushes it one interval forward; it may lead the clock by at most
 `burst` intervals; rejects are free and return an exact retry hint. No timers,
-no cleanup, no resets.
+no cleanup, no resets. The int return keeps the hot path allocation-free —
+the largest single measured CPython cost of a tuple-returning API.
 
 ## Arena API (v0.2 — fixed footprint, shared across workers)
 

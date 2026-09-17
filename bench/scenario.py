@@ -71,14 +71,14 @@ def decider_for(engine: str, sc: dict):
         from dripline import GcraLimiter
         rate, burst = sc["dripline"]
         lim = GcraLimiter(rate_per_second=rate, burst=burst)
-        return lambda key: lim.try_acquire(key).allowed
+        return lambda key: not lim.try_acquire(key)
     if engine == "dripline-arena":
         from dripline import ArenaGcraLimiter
         rate, burst = sc["dripline"]
         lim = ArenaGcraLimiter(rate_per_second=rate, burst=burst,
                                slots=ARENA_SLOTS,
                                path=os.environ.get("DRIPLINE_ARENA_PATH"))
-        return lambda key: lim.try_acquire(key).allowed
+        return lambda key: not lim.try_acquire(key)
     if engine in ("limits-fixed-window", "limits-moving-window"):
         from limits import parse
         from limits.storage import MemoryStorage
