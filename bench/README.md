@@ -41,3 +41,33 @@ and [aiolimiter](https://github.com/mjpieters/aiolimiter).
 
 Harness script lands with v0.1 (`bench/run.py`); this file fixes the rules
 before the first number exists.
+
+## Champion references (`bench/champions.py`)
+
+To keep claims honest, the suite also runs world-class references under a
+**champion protocol**: every runtime (CPython, PyPy, Rust `governor`) reads the
+*bit-identical* key files produced from the same seed, so offered load cannot
+differ by a byte. PyPy runs dripline's own `core.py` unmodified — it isolates
+the CPython tax from the algorithm; governor is the Rust ecosystem's standard
+GCRA limiter, configured identically (1000/min, burst 100).
+
+```bash
+# 1) build the champion binary (once, or after changing it)
+docker run --rm -v "${PWD}:/bench" rust:1-slim \
+  cargo build --release --manifest-path /bench/bench/champions/rust/Cargo.toml
+
+# 2) run everything (pinned container) — prep, CPython+Rust rows, RSS, report
+docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
+  python /bench/bench/champions.py all
+
+# 3) PyPy row (separate image, same pinning; 3 runs -> jsonl), then re-render
+docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" pypy:3.11-slim-bookworm \
+  sh -c 'for i in 1 2 3; do pypy3 /bench/bench/champions/driver.py \
+    --keys-dir /bench/bench/champions/work; done' \
+  > bench/champions/work/pypy.jsonl
+docker run --rm -v "${PWD}:/bench" python:3.12-slim \
+  sh -c 'python /bench/bench/champions.py merge-pypy && python /bench/bench/champions.py render'
+```
+
+Results land in `bench/results/vX.Y.champions.md`; champion work files are
+build artifacts and stay untracked.
