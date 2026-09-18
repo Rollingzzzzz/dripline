@@ -44,10 +44,14 @@ retry_ns = lim.try_acquire("client-id")   # same int contract
 ```
 
 Three layers in one region (slots | heat map | generation word): L1 answers
-"rejected a moment ago" from one shared byte stamped with the current
-generation — rotation is O(1) (bump the generation; old stamps stop
-matching; writing is deleting, again). L2 locates the client's slot via a
-stable fingerprint (same key, same slot, every process). L3 rejects against
+"rejected a moment ago" from one byte stamped with the current generation —
+rotation is O(1) (bump the generation; old stamps stop matching; writing is
+deleting, again). The map bytes are shared, but indices use Python's cached
+process-local string hash on purpose — a stable stdlib hash (crc32 + encode)
+costs ~2.5x more and a pre-filter must stay cheaper than the path it
+fronts; each worker warms its own overlay, so size map_bytes for
+workers x rejected clients. L2 locates the client's slot via a stable
+fingerprint (same key, same slot, every process). L3 rejects against
 a per-process coarse tick (no clock read); L4 admits with a fresh clock —
 exact. Measured (4 workers, pinned): 9.4M dec/s = 14% of Rust governor
 with TRUE global budgets (admits 301,724 vs 300,000 ceiling) — every

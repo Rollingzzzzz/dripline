@@ -15,14 +15,21 @@ Three ideas, one region, one file::
 What each layer buys, and what it costs:
 
 **L1 — the shared heat map.** A flat byte per key hash, stamped with the
-current *generation*. A hit means "some worker rejected this client a
+current *generation*. A hit means "this worker rejected this client a
 moment ago" and is answered without a clock read, without the slot table,
 without arithmetic. Rotation is O(1): instead of zeroing the map, every
 worker occasionally bumps the generation word in the same file — bytes
 stamped with older generations simply stop matching. Writing is deleting,
-again. The map is shared across workers, so the whole deployment warms one
-filter; false positives can only over-reject, bounded by one rotation
-window (fail-closed, the standing direction of every dripline mode).
+again. The map *bytes* are shared, but the index is Python's process-local
+string hash — deliberately: the cheapest stable stdlib alternative
+(``crc32`` including the ``encode`` it needs) costs ~2.5x more, and a
+pre-filter must stay cheaper than the path it fronts (the adr/0001
+lesson). Each worker therefore warms its own overlay on the shared bytes,
+so effective fill — and with it the false-rejection rate — scales with
+``workers x recently rejected clients``, not clients alone: size
+``map_bytes`` accordingly. False positives can only over-reject, bounded
+by one rotation window (fail-closed, the standing direction of every
+dripline mode).
 
 **L2 — the slot, not a dict.** No fingerprint cache here, by design: the
 heat map already caches rejects — the ~99% case — so a cache would only
@@ -73,9 +80,11 @@ class ApexLimiter(ArenaGcraLimiter):
             client), so RSS is capped at the region size forever.
         path: arena file. ``None`` → private anonymous region (same code
             path, per-process budgets).
-        map_bytes: presence map size in bytes (power of two), shared across
-            workers. False-rejection rate ≈ recently rejected clients /
-            map_bytes, bounded by one rotation window.
+        map_bytes: presence map size in bytes (power of two); the bytes are
+            shared across workers but indices are process-local (see L1 in
+            the module docstring), so false-rejection rate ≈ workers x
+            recently rejected clients / map_bytes, each bounded by one
+            rotation window — size for the worker count too.
         rotate_ns: rotation window; ``None`` picks ``min(250 ms,
             3 x period)`` — wide enough that hammering clients re-register
             rarely, tight enough that restored credit is never held back
@@ -147,7 +156,9 @@ class ApexLimiter(ArenaGcraLimiter):
     def try_acquire(self, key: str, now_ns: int | None = None) -> int:
         """``0`` = admitted; ``>0`` = wait in ns (exact on admits, the
         rotation window as a conservative bound on presence hits)."""
-        # L1 — shared heat map: one byte answers "seen over budget lately".
+        # L1 — the heat map answers "seen over budget lately" with one byte.
+        # hash() is process-local on purpose: the stable alternatives cost
+        # more than this entire layer saves (see the module docstring).
         i = hash(key) & self._fmask
         mp = self._map
         if mp[i] == self._gen:
