@@ -34,13 +34,14 @@ docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" python:3.12-slim 
 
 ## Current state
 
-Branch v0.2: ApexLimiter flagship (shared mmap arena + tick + presence,
-14% of governor, TRUE global budgets) + the FastAPI/Starlette layer
-(dripline.ext.fastapi: Limiter decorator, LimiterMiddleware, exact
-Retry-After) + demo/ (100-API-key compose benchmark vs aiolimiter, HTML
-report). Regression protocol: --only dripline-apex per iteration
-(bench/README.md); full table only when the standing set changes. Bloom
-and standalone presence measured out (docs/adr/0001, v0.3.1 results).
+RELEASE 0.4.0 on main: ApexLimiter is the flagship (shared mmap arena +
+tick + presence map in one region — 14% of Rust governor with true global
+budgets across workers), flanked by Arena/Tick/Gcra engines and the
+FastAPI/Starlette layer (dripline.ext.fastapi). Package surface is slim:
+experimental bloom/presence classes were retired at release (docs/adr/0001).
+demo/ holds the 100-API-key live comparison (compose, HTML report, one-click
+GUI). Regression protocol: --only dripline-apex per iteration
+(bench/README.md); release protocol (60 s canonical tables) for every tag.
 Standing verification rule: every core change re-runs the scenario
 scoreboard before commit (bench/README.md). Still open from v0.1:
 decorator + ASGI middleware.
