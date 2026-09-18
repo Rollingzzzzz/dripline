@@ -1,0 +1,41 @@
+# Demo stack: one server + one client, pinned to disjoint cpu sets so the
+# load generator never steals the server's cores. Everything is driven by
+# demo/run.py, which sets ENGINE / WORKERS / OUT per run.
+services:
+  server:
+    image: python:3.12-slim
+    volumes:
+      - ../src:/dripline/src:ro
+      - ./server.py:/demo/server.py:ro
+      - ./requirements.txt:/demo/requirements.txt:ro
+    environment:
+      ENGINE: ${ENGINE:-dripline}
+      RATE: ${RATE:-100/10s}
+      ARENA: /dev/shm/dripline-demo.arena
+    command: >-
+      sh -c "pip install --quiet --no-cache-dir -r /demo/requirements.txt
+      && uvicorn --app-dir /demo server:app --host 0.0.0.0 --port 8000
+      --workers ${WORKERS:-4}"
+    cpuset: "0-3"
+    mem_limit: 4g
+
+  client:
+    image: python:3.12-slim
+    volumes:
+      - ./client.py:/demo/client.py:ro
+      - ./out:/out
+    environment:
+      URL: http://server:8000
+      ENGINE: ${ENGINE:-dripline}
+      WORKERS: ${WORKERS:-4}
+      RATE: ${RATE:-100/10s}
+      KEY_COUNT: ${KEY_COUNT:-100}
+      RATE_PER_KEY: ${RATE_PER_KEY:-50}
+      STREAMS_PER_KEY: ${STREAMS_PER_KEY:-4}
+      DURATION: ${DURATION:-15}
+      OUT: ${OUT:-/out/run.json}
+    command: python /demo/client.py
+    cpuset: "4-5"
+    mem_limit: 4g
+    depends_on:
+      - server

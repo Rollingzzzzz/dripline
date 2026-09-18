@@ -1,0 +1,6 @@
+# Pinned comparison dependencies for the benchmark harness.
+# These are benchmark TARGETS only — dripline core itself stays zero-dependency.
+# Keep pinned so numbers stay comparable across reruns and machines.
+limits==5.8.0
+aiolimiter==1.3.0
+redis==8.1.0      # adversarial suite only: Redis-backed limits storage

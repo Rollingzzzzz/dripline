@@ -10,22 +10,122 @@ One machine (or a few), 2–8 ASGI workers, 10^4–10^7 distinct clients, and no
 desire to run Redis just for counting. Smaller: a plain dict limiter suffices.
 Larger/multi-region exactness: keep Redis at the center.
 
-## Core API (v0.0.1, stable arithmetic — sugar lands in v0.1)
+## Core API (stable arithmetic — sugar lands with the middleware)
 
 ```python
 from dripline import GcraLimiter
 
 lim = GcraLimiter(rate_per_second=1000 / 60, burst=100)   # 1000/min, bank 100
 
-decision = lim.try_acquire("client-id")   # or pass now_ns= for determinism
-decision.allowed           # bool
-decision.retry_after_ns    # 0 when allowed; exact wait otherwise
+retry_ns = lim.try_acquire("client-id")   # or pass now_ns= for determinism
+retry_ns == 0              # admitted
+retry_ns > 0               # rejected: exact wait in nanoseconds
+
+d = lim.try_acquire_decision("client-id")   # explicit pair when preferred
+d.allowed, d.retry_after_ns
 ```
 
 Algorithm: GCRA. One integer per client (earliest admissible time, monotonic
 ns). Admit pushes it one interval forward; it may lead the clock by at most
 `burst` intervals; rejects are free and return an exact retry hint. No timers,
-no cleanup, no resets.
+no cleanup, no resets. The int return keeps the hot path allocation-free —
+the largest single measured CPython cost of a tuple-returning API.
+
+## Apex (the flagship: shared arena + tick + presence in one mmap)
+
+```python
+from dripline import ApexLimiter
+
+# every worker opens the SAME file: slots, heat map and generation are
+# shared — one global budget per client, no Redis, no cleanup thread
+lim = ApexLimiter(rate_per_second=1000 / 60, burst=100,
+                  slots=1_000_000, path="/run/dripline.apex")
+retry_ns = lim.try_acquire("client-id")   # same int contract
+```
+
+Three layers in one region (slots | heat map | generation word): L1 answers
+"rejected a moment ago" from one byte stamped with the current generation —
+rotation is O(1) (bump the generation; old stamps stop matching; writing is
+deleting, again). The map bytes are shared, but indices use Python's cached
+process-local string hash on purpose — a stable stdlib hash (crc32 + encode)
+costs ~2.5x more and a pre-filter must stay cheaper than the path it
+fronts; each worker warms its own overlay, so size map_bytes for
+workers x rejected clients. L2 locates the client's slot via a stable
+fingerprint (same key, same slot, every process). L3 rejects against
+a per-process coarse tick (no clock read); L4 admits with a fresh clock —
+exact. Measured (4 workers, pinned): 9.4M dec/s = 14% of Rust governor
+with TRUE global budgets (admits 301,724 vs 300,000 ceiling) — every
+per-worker engine on the same board admits 4x over. Errors are all bounded
+and fail-closed: presence false-positives over-reject for at most one
+rotation window; a stale tick only makes the limiter stricter; same-slot
+races lose at most one update.
+
+## FastAPI / Starlette (dripline[fastapi] — one import, one decorator)
+
+```python
+from fastapi import FastAPI, Request
+from dripline.ext.fastapi import Limiter, api_key_header
+
+app = FastAPI()
+limiter = Limiter(key_func=api_key_header)          # or key_func="x-api-key"
+# multi-worker deployments: Limiter(..., path="/run/dripline.arena")
+
+@app.get("/data")
+@limiter.limit("1000/10s")            # burst bank = one window by default
+async def get_data(request: Request): # request param = the slowapi convention
+    return {"ok": True}
+```
+
+Over budget -> 429 with `Retry-After` (RFC integer seconds) AND
+`X-RateLimit-Retry-After-Ns` (the exact nanosecond wait — no rounding).
+Nothing to install on the app. One engine per rate spec is built from
+ApexLimiter by default; `path=` shares budgets across uvicorn workers.
+Pure-ASGI apps: `app.add_middleware(LimiterMiddleware, rate="1000/10s")`.
+Only Starlette is imported — works for any Starlette-based framework.
+
+## Tick mode (v0.3 — exact admits, clock-amortized rejects)
+
+```python
+from dripline import TickGcraLimiter
+
+lim = TickGcraLimiter(rate_per_second=1000 / 60, burst=100, pump_every=512)
+retry_ns = lim.try_acquire("client-id")   # same int contract
+```
+
+Admits always read a fresh clock (exact); rejects compare against a coarse
+shared tick refreshed every `pump_every` decisions. Error direction: a stale
+tick is in the past, so pressure only makes the limiter stricter — never
+looser; over-rejection is bounded by the pump interval. Measured: 267
+ns/dec reject-dominated vs 306 exact / 779 aiolimiter; 10.9M dec/s
+multi-worker.
+
+## Arena API (v0.2 — fixed footprint, shared across workers)
+
+```python
+from dripline import ArenaGcraLimiter
+
+lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100,
+                       slots=1_000_000)              # 32 MiB, fixed forever
+decision = lim.try_acquire("client-id")              # same Decision, same math
+
+# multi-worker: every process opens the SAME file — budgets become global
+lim = ArenaGcraLimiter(rate_per_second=1000 / 60, burst=100,
+                       slots=1_000_000, path="/run/dripline.arena")
+
+lim.stats()          # occupancy/activity — one NumPy pass (dripline[numpy])
+lim.close()          # or use as a context manager
+```
+
+Storage: a pre-allocated table of 32-byte slots inside an mmap region — TAT +
+stable blake2b fingerprint + two reserved words. Placement is identical in
+every process (same key → same slot). Idle clients drain on their own; a
+drained slot is indistinguishable from a fresh client, so newcomers recycle
+it: RSS never exceeds `slots × 32 bytes` no matter how many clients pass
+through. A fixed direct-mapped fingerprint cache keeps the hot path at
+hash → one verified slot touch; blake2b runs only on first sight of a key.
+Honest bounds: concurrent same-slot writes can lose an update (±1 permit);
+an over-subscribed table shares fate at the home bucket — approximate, never
+exact.
 
 ## Properties
 

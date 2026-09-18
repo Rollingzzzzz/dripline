@@ -1,0 +1,282 @@
+{
+ "cpython": {
+  "median": {
+   "runtime": "cpython 3.12.14",
+   "engine": "dripline GCRA (dict) \u2014 core.py unmodified",
+   "uniform": {
+    "mean_ns": 898.4,
+    "ops_s": 1113087,
+    "bulk_n": 1000000,
+    "sample_n": 200000,
+    "p50": 900,
+    "p95": 1200,
+    "p99": 1500
+   },
+   "zipf": {
+    "mean_ns": 716.4,
+    "ops_s": 1395965,
+    "bulk_n": 1000000,
+    "sample_n": 200000,
+    "p50": 800,
+    "p95": 901,
+    "p99": 1300
+   },
+   "runs": 3
+  },
+  "runs": [
+   {
+    "runtime": "cpython 3.12.14",
+    "engine": "dripline GCRA (dict) \u2014 core.py unmodified",
+    "uniform": {
+     "mean_ns": 898.4,
+     "ops_s": 1113087,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 900,
+     "p95": 1200,
+     "p99": 1500
+    },
+    "zipf": {
+     "mean_ns": 716.4,
+     "ops_s": 1395965,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 800,
+     "p95": 901,
+     "p99": 1300
+    }
+   },
+   {
+    "runtime": "cpython 3.12.14",
+    "engine": "dripline GCRA (dict) \u2014 core.py unmodified",
+    "uniform": {
+     "mean_ns": 848.9,
+     "ops_s": 1177967,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 800,
+     "p95": 1200,
+     "p99": 1400
+    },
+    "zipf": {
+     "mean_ns": 712.5,
+     "ops_s": 1403491,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 800,
+     "p95": 901,
+     "p99": 1201
+    }
+   },
+   {
+    "runtime": "cpython 3.12.14",
+    "engine": "dripline GCRA (dict) \u2014 core.py unmodified",
+    "uniform": {
+     "mean_ns": 904.2,
+     "ops_s": 1106001,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 900,
+     "p95": 1200,
+     "p99": 1500
+    },
+    "zipf": {
+     "mean_ns": 754.0,
+     "ops_s": 1326238,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 800,
+     "p95": 1000,
+     "p99": 1300
+    }
+   }
+  ]
+ },
+ "pypy": {
+  "median": {
+   "runtime": "pypy 3.11.15",
+   "engine": "dripline GCRA (dict) \u2014 core.py unmodified",
+   "uniform": {
+    "mean_ns": 300.9,
+    "ops_s": 3323171,
+    "bulk_n": 1000000,
+    "sample_n": 200000,
+    "p50": 300,
+    "p95": 701,
+    "p99": 1000
+   },
+   "zipf": {
+    "mean_ns": 98.8,
+    "ops_s": 10125382,
+    "bulk_n": 1000000,
+    "sample_n": 200000,
+    "p50": 100,
+    "p95": 300,
+    "p99": 700
+   },
+   "runs": 3
+  },
+  "runs": [
+   {
+    "runtime": "pypy 3.11.15",
+    "engine": "dripline GCRA (dict) \u2014 core.py unmodified",
+    "uniform": {
+     "mean_ns": 300.9,
+     "ops_s": 3323171,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 300,
+     "p95": 701,
+     "p99": 1000
+    },
+    "zipf": {
+     "mean_ns": 98.8,
+     "ops_s": 10125382,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 100,
+     "p95": 300,
+     "p99": 700
+    }
+   },
+   {
+    "runtime": "pypy 3.11.15",
+    "engine": "dripline GCRA (dict) \u2014 core.py unmodified",
+    "uniform": {
+     "mean_ns": 339.5,
+     "ops_s": 2945632,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 300,
+     "p95": 800,
+     "p99": 1000
+    },
+    "zipf": {
+     "mean_ns": 100.3,
+     "ops_s": 9966724,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 100,
+     "p95": 400,
+     "p99": 700
+    }
+   },
+   {
+    "runtime": "pypy 3.11.15",
+    "engine": "dripline GCRA (dict) \u2014 core.py unmodified",
+    "uniform": {
+     "mean_ns": 286.3,
+     "ops_s": 3492327,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 300,
+     "p95": 700,
+     "p99": 900
+    },
+    "zipf": {
+     "mean_ns": 95.9,
+     "ops_s": 10427441,
+     "bulk_n": 1000000,
+     "sample_n": 200000,
+     "p50": 100,
+     "p95": 300,
+     "p99": 600
+    }
+   }
+  ]
+ },
+ "rust": {
+  "median": {
+   "engine": "governor GCRA \u2014 dashmap-backed, compiled",
+   "runtime": "Rust (governor crate)",
+   "uniform": {
+    "bulk_n": 1000000,
+    "mean_ns": 105.6,
+    "ops_s": 9473844.0,
+    "p50": 100,
+    "p95": 200,
+    "p99": 401,
+    "sample_n": 200000
+   },
+   "zipf": {
+    "bulk_n": 1000000,
+    "mean_ns": 65.8,
+    "ops_s": 15198416.0,
+    "p50": 100,
+    "p95": 200,
+    "p99": 201,
+    "sample_n": 200000
+   },
+   "runs": 3,
+   "engine_detail": "governor crate, dashmap GCRA"
+  },
+  "runs": [
+   {
+    "engine": "governor GCRA \u2014 dashmap-backed, compiled",
+    "runtime": "Rust (governor crate)",
+    "uniform": {
+     "bulk_n": 1000000,
+     "mean_ns": 105.6,
+     "ops_s": 9473844.0,
+     "p50": 100,
+     "p95": 200,
+     "p99": 400,
+     "sample_n": 200000
+    },
+    "zipf": {
+     "bulk_n": 1000000,
+     "mean_ns": 68.4,
+     "ops_s": 14610973.0,
+     "p50": 100,
+     "p95": 200,
+     "p99": 201,
+     "sample_n": 200000
+    }
+   },
+   {
+    "engine": "governor GCRA \u2014 dashmap-backed, compiled",
+    "runtime": "Rust (governor crate)",
+    "uniform": {
+     "bulk_n": 1000000,
+     "mean_ns": 101.5,
+     "ops_s": 9856981.0,
+     "p50": 100,
+     "p95": 200,
+     "p99": 401,
+     "sample_n": 200000
+    },
+    "zipf": {
+     "bulk_n": 1000000,
+     "mean_ns": 65.8,
+     "ops_s": 15198416.0,
+     "p50": 100,
+     "p95": 200,
+     "p99": 200,
+     "sample_n": 200000
+    }
+   },
+   {
+    "engine": "governor GCRA \u2014 dashmap-backed, compiled",
+    "runtime": "Rust (governor crate)",
+    "uniform": {
+     "bulk_n": 1000000,
+     "mean_ns": 145.6,
+     "ops_s": 6867781.0,
+     "p50": 200,
+     "p95": 300,
+     "p99": 700,
+     "sample_n": 200000
+    },
+    "zipf": {
+     "bulk_n": 1000000,
+     "mean_ns": 65.4,
+     "ops_s": 15284174.0,
+     "p50": 100,
+     "p95": 200,
+     "p99": 300,
+     "sample_n": 200000
+    }
+   }
+  ]
+ }
+}

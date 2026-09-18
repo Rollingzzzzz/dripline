@@ -10,3 +10,6 @@ build/
 .coverage
 htmlcov/
 .DS_Store
+.zcode/
+bench/champions/work/
+bench/champions/rust/target/

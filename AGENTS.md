@@ -5,9 +5,18 @@
 ```bash
 # smoke tests (no dependencies needed)
 PYTHONPATH=src python tests/test_core.py
+PYTHONPATH=src python tests/test_arena.py
+PYTHONPATH=src python tests/test_bloom.py
+PYTHONPATH=src python tests/test_tick.py
+PYTHONPATH=src python tests/test_apex.py
+PYTHONPATH=src python tests/test_rates.py
+PYTHONPATH=src python tests/test_fastapi.py   # needs fastapi+httpx installed
 
 # full test suite
 PYTHONPATH=src python -m pytest tests/
+
+# lint — MUST pass before every commit (config: [tool.ruff] in pyproject.toml)
+ruff check .
 
 # benchmarks (pinned environment — see bench/README.md)
 docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" python:3.12-slim python /bench/bench/run.py
@@ -25,5 +34,14 @@ docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" python:3.12-slim 
 
 ## Current state
 
-v0.0.1: scalar GCRA core (`src/dripline/core.py`) + smoke tests. Next milestone
-is v0.1: decorator + ASGI middleware + first benchmark table.
+RELEASE 0.4.0 on main: ApexLimiter is the flagship (shared mmap arena +
+tick + presence map in one region — 14% of Rust governor with true global
+budgets across workers), flanked by Arena/Tick/Gcra engines and the
+FastAPI/Starlette layer (dripline.ext.fastapi). Package surface is slim:
+experimental bloom/presence classes were retired at release (docs/adr/0001).
+demo/ holds the 100-API-key live comparison (compose, HTML report, one-click
+GUI). Regression protocol: --only dripline-apex per iteration
+(bench/README.md); release protocol (60 s canonical tables) for every tag.
+Standing verification rule: every core change re-runs the scenario
+scoreboard before commit (bench/README.md). Still open from v0.1:
+decorator + ASGI middleware.

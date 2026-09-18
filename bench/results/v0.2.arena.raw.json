@@ -1,0 +1,45 @@
+{
+ "env": {
+  "python": "3.12.14",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41"
+ },
+ "footprint": {
+  "kind": "footprint",
+  "rss_before_kb": 24716,
+  "rows": [
+   {
+    "clients": 1000000,
+    "rss_kb": 402796,
+    "elapsed_s": 5.3
+   },
+   {
+    "clients": 5000000,
+    "rss_kb": 402800,
+    "elapsed_s": 25.8
+   },
+   {
+    "clients": 10000000,
+    "rss_kb": 402800,
+    "elapsed_s": 52.2
+   }
+  ],
+  "rss_after_close_kb": 27800
+ },
+ "dict": [
+  {
+   "kind": "dict",
+   "clients": 1000000,
+   "rss_delta_kb": 124348
+  }
+ ],
+ "churn": {
+  "kind": "churn",
+  "clients": 10000000,
+  "slots": 1000000,
+  "rss_delta_kb": 35484,
+  "active_admits": 1041,
+  "active_bound": 1045,
+  "elapsed_s": 56.5
+ },
+ "guard_allowed": 100
+}

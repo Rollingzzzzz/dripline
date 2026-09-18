@@ -1,0 +1,634 @@
+{
+ "env": {
+  "python": "3.12.14",
+  "cpu": "AMD Ryzen 5 3600X 6-Core Processor",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41"
+ },
+ "params": {
+  "workers": 4,
+  "clients": 100,
+  "duration": 60.0
+ },
+ "results": [
+  {
+   "engine": "no-op-floor",
+   "scenario": "loose",
+   "workers": 4,
+   "total_dec_per_s": 27918217,
+   "per_worker_dec_per_s": [
+    6987039,
+    6974540,
+    6956945,
+    6999663
+   ],
+   "admits": 1675093000,
+   "admit_ratio": 1.0,
+   "worst_admits_per_client": 4199800.0,
+   "worker_rows": [
+    {
+     "engine": "no-op-floor",
+     "scenario": "loose",
+     "decisions": 419223000,
+     "admits": 419223000,
+     "admit_ratio": 1.0,
+     "dec_per_s": 6987039,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "no-op-floor",
+     "scenario": "loose",
+     "decisions": 418473000,
+     "admits": 418473000,
+     "admit_ratio": 1.0,
+     "dec_per_s": 6974540,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "no-op-floor",
+     "scenario": "loose",
+     "decisions": 417417000,
+     "admits": 417417000,
+     "admit_ratio": 1.0,
+     "dec_per_s": 6956945,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "no-op-floor",
+     "scenario": "loose",
+     "decisions": 419980000,
+     "admits": 419980000,
+     "admit_ratio": 1.0,
+     "dec_per_s": 6999663,
+     "elapsed_s": 60.0
+    }
+   ]
+  },
+  {
+   "engine": "dripline-gcra",
+   "scenario": "loose",
+   "workers": 4,
+   "total_dec_per_s": 4041933,
+   "per_worker_dec_per_s": [
+    1010557,
+    1019998,
+    1007174,
+    1004167
+   ],
+   "admits": 2799900,
+   "admit_ratio": 0.01155,
+   "worst_admits_per_client": 7000.0,
+   "worker_rows": [
+    {
+     "engine": "dripline-gcra",
+     "scenario": "loose",
+     "decisions": 60634000,
+     "admits": 700000,
+     "admit_ratio": 0.01154,
+     "dec_per_s": 1010557,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "dripline-gcra",
+     "scenario": "loose",
+     "decisions": 61201000,
+     "admits": 700000,
+     "admit_ratio": 0.01144,
+     "dec_per_s": 1019998,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "dripline-gcra",
+     "scenario": "loose",
+     "decisions": 60431000,
+     "admits": 700000,
+     "admit_ratio": 0.01158,
+     "dec_per_s": 1007174,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "dripline-gcra",
+     "scenario": "loose",
+     "decisions": 60250000,
+     "admits": 699900,
+     "admit_ratio": 0.01162,
+     "dec_per_s": 1004167,
+     "elapsed_s": 60.0
+    }
+   ]
+  },
+  {
+   "engine": "limits-fixed-window",
+   "scenario": "loose",
+   "workers": 4,
+   "total_dec_per_s": 1112717,
+   "per_worker_dec_per_s": [
+    275995,
+    280233,
+    278726,
+    277737
+   ],
+   "admits": 2400000,
+   "admit_ratio": 0.03595,
+   "worst_admits_per_client": 6000.0,
+   "worker_rows": [
+    {
+     "engine": "limits-fixed-window",
+     "scenario": "loose",
+     "decisions": 16560000,
+     "admits": 600000,
+     "admit_ratio": 0.03623,
+     "dec_per_s": 275995,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "limits-fixed-window",
+     "scenario": "loose",
+     "decisions": 16814000,
+     "admits": 600000,
+     "admit_ratio": 0.03568,
+     "dec_per_s": 280233,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "limits-fixed-window",
+     "scenario": "loose",
+     "decisions": 16724000,
+     "admits": 600000,
+     "admit_ratio": 0.03588,
+     "dec_per_s": 278726,
+     "elapsed_s": 60.002
+    },
+    {
+     "engine": "limits-fixed-window",
+     "scenario": "loose",
+     "decisions": 16665000,
+     "admits": 600000,
+     "admit_ratio": 0.036,
+     "dec_per_s": 277737,
+     "elapsed_s": 60.003
+    }
+   ]
+  },
+  {
+   "engine": "limits-moving-window",
+   "scenario": "loose",
+   "workers": 4,
+   "total_dec_per_s": 1184117,
+   "per_worker_dec_per_s": [
+    293927,
+    295509,
+    294764,
+    299897
+   ],
+   "admits": 2400000,
+   "admit_ratio": 0.03378,
+   "worst_admits_per_client": 6000.0,
+   "worker_rows": [
+    {
+     "engine": "limits-moving-window",
+     "scenario": "loose",
+     "decisions": 17636000,
+     "admits": 600000,
+     "admit_ratio": 0.03402,
+     "dec_per_s": 293927,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "limits-moving-window",
+     "scenario": "loose",
+     "decisions": 17731000,
+     "admits": 600000,
+     "admit_ratio": 0.03384,
+     "dec_per_s": 295509,
+     "elapsed_s": 60.002
+    },
+    {
+     "engine": "limits-moving-window",
+     "scenario": "loose",
+     "decisions": 17686000,
+     "admits": 600000,
+     "admit_ratio": 0.03393,
+     "dec_per_s": 294764,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "limits-moving-window",
+     "scenario": "loose",
+     "decisions": 17994000,
+     "admits": 600000,
+     "admit_ratio": 0.03334,
+     "dec_per_s": 299897,
+     "elapsed_s": 60.001
+    }
+   ]
+  },
+  {
+   "engine": "aiolimiter-perkey",
+   "scenario": "loose",
+   "workers": 4,
+   "total_dec_per_s": 4616433,
+   "per_worker_dec_per_s": [
+    1159831,
+    1148442,
+    1148085,
+    1159979
+   ],
+   "admits": 2800000,
+   "admit_ratio": 0.01011,
+   "worst_admits_per_client": 7000.0,
+   "worker_rows": [
+    {
+     "engine": "aiolimiter-perkey",
+     "scenario": "loose",
+     "decisions": 69591000,
+     "admits": 700000,
+     "admit_ratio": 0.01006,
+     "dec_per_s": 1159831,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "aiolimiter-perkey",
+     "scenario": "loose",
+     "decisions": 68908000,
+     "admits": 700000,
+     "admit_ratio": 0.01016,
+     "dec_per_s": 1148442,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "aiolimiter-perkey",
+     "scenario": "loose",
+     "decisions": 68887000,
+     "admits": 700000,
+     "admit_ratio": 0.01016,
+     "dec_per_s": 1148085,
+     "elapsed_s": 60.002
+    },
+    {
+     "engine": "aiolimiter-perkey",
+     "scenario": "loose",
+     "decisions": 69600000,
+     "admits": 700000,
+     "admit_ratio": 0.01006,
+     "dec_per_s": 1159979,
+     "elapsed_s": 60.001
+    }
+   ]
+  },
+  {
+   "engine": "governor-rust",
+   "scenario": "loose",
+   "workers": 4,
+   "total_dec_per_s": 68546783,
+   "per_worker_dec_per_s": [
+    17146474.665504616,
+    17098544.006960325,
+    17103578.307731908,
+    17198164.967201333
+   ],
+   "admits": 2799602,
+   "admit_ratio": 0.00068,
+   "worst_admits_per_client": 6999.0,
+   "worker_rows": [
+    {
+     "admit_ratio": 0.0006803144279342023,
+     "admits": 699900,
+     "dec_per_s": 17146474.665504616,
+     "decisions": 1028789000,
+     "elapsed_s": 60.000030331
+    },
+    {
+     "admit_ratio": 0.0006822215918893707,
+     "admits": 699900,
+     "dec_per_s": 17098544.006960325,
+     "decisions": 1025913000,
+     "elapsed_s": 60.00002103
+    },
+    {
+     "admit_ratio": 0.0006820208240963151,
+     "admits": 699900,
+     "dec_per_s": 17103578.307731908,
+     "decisions": 1026215000,
+     "elapsed_s": 60.00001763
+    },
+    {
+     "admit_ratio": 0.0006782719088274913,
+     "admits": 699902,
+     "dec_per_s": 17198164.967201333,
+     "decisions": 1031890000,
+     "elapsed_s": 60.000005929
+    }
+   ]
+  },
+  {
+   "engine": "no-op-floor",
+   "scenario": "tight",
+   "workers": 4,
+   "total_dec_per_s": 27836867,
+   "per_worker_dec_per_s": [
+    6939087,
+    6927491,
+    6902325,
+    7067911
+   ],
+   "admits": 1670212000,
+   "admit_ratio": 1.0,
+   "worst_admits_per_client": 4240760.0,
+   "worker_rows": [
+    {
+     "engine": "no-op-floor",
+     "scenario": "tight",
+     "decisions": 416346000,
+     "admits": 416346000,
+     "admit_ratio": 1.0,
+     "dec_per_s": 6939087,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "no-op-floor",
+     "scenario": "tight",
+     "decisions": 415650000,
+     "admits": 415650000,
+     "admit_ratio": 1.0,
+     "dec_per_s": 6927491,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "no-op-floor",
+     "scenario": "tight",
+     "decisions": 414140000,
+     "admits": 414140000,
+     "admit_ratio": 1.0,
+     "dec_per_s": 6902325,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "no-op-floor",
+     "scenario": "tight",
+     "decisions": 424076000,
+     "admits": 424076000,
+     "admit_ratio": 1.0,
+     "dec_per_s": 7067911,
+     "elapsed_s": 60.0
+    }
+   ]
+  },
+  {
+   "engine": "dripline-gcra",
+   "scenario": "tight",
+   "workers": 4,
+   "total_dec_per_s": 3965117,
+   "per_worker_dec_per_s": [
+    976865,
+    989946,
+    1000340,
+    997931
+   ],
+   "admits": 27925,
+   "admit_ratio": 0.00012,
+   "worst_admits_per_client": 70.0,
+   "worker_rows": [
+    {
+     "engine": "dripline-gcra",
+     "scenario": "tight",
+     "decisions": 58613000,
+     "admits": 7000,
+     "admit_ratio": 0.00012,
+     "dec_per_s": 976865,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "dripline-gcra",
+     "scenario": "tight",
+     "decisions": 59397000,
+     "admits": 7000,
+     "admit_ratio": 0.00012,
+     "dec_per_s": 989946,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "dripline-gcra",
+     "scenario": "tight",
+     "decisions": 60021000,
+     "admits": 7000,
+     "admit_ratio": 0.00012,
+     "dec_per_s": 1000340,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "dripline-gcra",
+     "scenario": "tight",
+     "decisions": 59876000,
+     "admits": 6925,
+     "admit_ratio": 0.00012,
+     "dec_per_s": 997931,
+     "elapsed_s": 60.0
+    }
+   ]
+  },
+  {
+   "engine": "limits-fixed-window",
+   "scenario": "tight",
+   "workers": 4,
+   "total_dec_per_s": 1065883,
+   "per_worker_dec_per_s": [
+    266188,
+    266365,
+    269548,
+    263738
+   ],
+   "admits": 24986,
+   "admit_ratio": 0.00039,
+   "worst_admits_per_client": 69.2,
+   "worker_rows": [
+    {
+     "engine": "limits-fixed-window",
+     "scenario": "tight",
+     "decisions": 15972000,
+     "admits": 6062,
+     "admit_ratio": 0.00038,
+     "dec_per_s": 266188,
+     "elapsed_s": 60.003
+    },
+    {
+     "engine": "limits-fixed-window",
+     "scenario": "tight",
+     "decisions": 15982000,
+     "admits": 6000,
+     "admit_ratio": 0.00038,
+     "dec_per_s": 266365,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "limits-fixed-window",
+     "scenario": "tight",
+     "decisions": 16173000,
+     "admits": 6000,
+     "admit_ratio": 0.00037,
+     "dec_per_s": 269548,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "limits-fixed-window",
+     "scenario": "tight",
+     "decisions": 15826000,
+     "admits": 6924,
+     "admit_ratio": 0.00044,
+     "dec_per_s": 263738,
+     "elapsed_s": 60.007
+    }
+   ]
+  },
+  {
+   "engine": "limits-moving-window",
+   "scenario": "tight",
+   "workers": 4,
+   "total_dec_per_s": 1255917,
+   "per_worker_dec_per_s": [
+    315963,
+    313637,
+    311366,
+    314927
+   ],
+   "admits": 24000,
+   "admit_ratio": 0.00032,
+   "worst_admits_per_client": 60.0,
+   "worker_rows": [
+    {
+     "engine": "limits-moving-window",
+     "scenario": "tight",
+     "decisions": 18958000,
+     "admits": 6000,
+     "admit_ratio": 0.00032,
+     "dec_per_s": 315963,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "limits-moving-window",
+     "scenario": "tight",
+     "decisions": 18819000,
+     "admits": 6000,
+     "admit_ratio": 0.00032,
+     "dec_per_s": 313637,
+     "elapsed_s": 60.002
+    },
+    {
+     "engine": "limits-moving-window",
+     "scenario": "tight",
+     "decisions": 18682000,
+     "admits": 6000,
+     "admit_ratio": 0.00032,
+     "dec_per_s": 311366,
+     "elapsed_s": 60.0
+    },
+    {
+     "engine": "limits-moving-window",
+     "scenario": "tight",
+     "decisions": 18896000,
+     "admits": 6000,
+     "admit_ratio": 0.00032,
+     "dec_per_s": 314927,
+     "elapsed_s": 60.001
+    }
+   ]
+  },
+  {
+   "engine": "aiolimiter-perkey",
+   "scenario": "tight",
+   "workers": 4,
+   "total_dec_per_s": 4680567,
+   "per_worker_dec_per_s": [
+    1164802,
+    1173495,
+    1172778,
+    1169403
+   ],
+   "admits": 27912,
+   "admit_ratio": 0.0001,
+   "worst_admits_per_client": 70.0,
+   "worker_rows": [
+    {
+     "engine": "aiolimiter-perkey",
+     "scenario": "tight",
+     "decisions": 69889000,
+     "admits": 6957,
+     "admit_ratio": 0.0001,
+     "dec_per_s": 1164802,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "aiolimiter-perkey",
+     "scenario": "tight",
+     "decisions": 70411000,
+     "admits": 7000,
+     "admit_ratio": 0.0001,
+     "dec_per_s": 1173495,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "aiolimiter-perkey",
+     "scenario": "tight",
+     "decisions": 70368000,
+     "admits": 6955,
+     "admit_ratio": 0.0001,
+     "dec_per_s": 1172778,
+     "elapsed_s": 60.001
+    },
+    {
+     "engine": "aiolimiter-perkey",
+     "scenario": "tight",
+     "decisions": 70166000,
+     "admits": 7000,
+     "admit_ratio": 0.0001,
+     "dec_per_s": 1169403,
+     "elapsed_s": 60.002
+    }
+   ]
+  },
+  {
+   "engine": "governor-rust",
+   "scenario": "tight",
+   "workers": 4,
+   "total_dec_per_s": 68938667,
+   "per_worker_dec_per_s": [
+    17206896.640926994,
+    17222811.92637473,
+    17184321.15680977,
+    17324614.43785502
+   ],
+   "admits": 27603,
+   "admit_ratio": 1e-05,
+   "worst_admits_per_client": 69.0,
+   "worker_rows": [
+    {
+     "admit_ratio": 6.6833653941151515e-06,
+     "admits": 6900,
+     "dec_per_s": 17206896.640926994,
+     "decisions": 1032414000,
+     "elapsed_s": 60.000011713
+    },
+    {
+     "admit_ratio": 6.6771888841256126e-06,
+     "admits": 6900,
+     "dec_per_s": 17222811.92637473,
+     "decisions": 1033369000,
+     "elapsed_s": 60.000016514
+    },
+    {
+     "admit_ratio": 6.692142067386961e-06,
+     "admits": 6900,
+     "dec_per_s": 17184321.15680977,
+     "decisions": 1031060000,
+     "elapsed_s": 60.000042515
+    },
+    {
+     "admit_ratio": 6.640839576056036e-06,
+     "admits": 6903,
+     "dec_per_s": 17324614.43785502,
+     "decisions": 1039477000,
+     "elapsed_s": 60.000007719
+    }
+   ]
+  }
+ ]
+}

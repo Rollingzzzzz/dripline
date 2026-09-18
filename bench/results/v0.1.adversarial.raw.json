@@ -1,0 +1,142 @@
+{
+ "env": {
+  "generated_utc": "2026-09-17T20:30:36+00:00",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "versions": {
+   "limits": "5.8.0",
+   "aiolimiter": "1.3.0",
+   "redis": "8.1.0"
+  }
+ },
+ "workers": [
+  {
+   "variant": "dripline GCRA (dict)",
+   "capacity": 10,
+   "admits_1_worker": 10,
+   "admits_4_workers": 40,
+   "expansion": 4.0
+  },
+  {
+   "variant": "limits fixed-window (memory)",
+   "capacity": 600,
+   "admits_1_worker": 600,
+   "admits_4_workers": 2400,
+   "expansion": 4.0
+  },
+  {
+   "variant": "limits moving-window (memory)",
+   "capacity": 600,
+   "admits_1_worker": 600,
+   "admits_4_workers": 2400,
+   "expansion": 4.0
+  },
+  {
+   "variant": "aiolimiter (per-key)",
+   "capacity": 600,
+   "admits_1_worker": 600,
+   "admits_4_workers": 2400,
+   "expansion": 4.0
+  },
+  {
+   "variant": "limits fixed-window (Redis)",
+   "capacity": 600,
+   "admits_1_worker": 600,
+   "admits_4_workers": 600,
+   "expansion": 1.0
+  },
+  {
+   "variant": "limits moving-window (Redis)",
+   "capacity": 600,
+   "admits_1_worker": 600,
+   "admits_4_workers": 600,
+   "expansion": 1.0
+  }
+ ],
+ "restart": [
+  {
+   "variant": "dripline GCRA (dict)",
+   "fresh_capacity": 10,
+   "re_admits_after_restart": 10
+  },
+  {
+   "variant": "limits fixed-window (memory)",
+   "fresh_capacity": 600,
+   "re_admits_after_restart": 600
+  },
+  {
+   "variant": "limits moving-window (memory)",
+   "fresh_capacity": 600,
+   "re_admits_after_restart": 600
+  },
+  {
+   "variant": "aiolimiter (per-key)",
+   "fresh_capacity": 600,
+   "re_admits_after_restart": 600
+  },
+  {
+   "variant": "limits fixed-window (Redis)",
+   "fresh_capacity": 600,
+   "re_admits_after_restart": 0
+  },
+  {
+   "variant": "limits moving-window (Redis)",
+   "fresh_capacity": 600,
+   "re_admits_after_restart": 0
+  }
+ ],
+ "stale_memory": [
+  {
+   "variant": "dripline GCRA (dict)",
+   "clients": 200000,
+   "rehit": 10000,
+   "rss_full_kb": 56876,
+   "rss_end_kb": 56876,
+   "returned_kb": 0
+  },
+  {
+   "variant": "limits fixed-window (memory)",
+   "clients": 200000,
+   "rehit": 10000,
+   "rss_full_kb": 94032,
+   "rss_end_kb": 94032,
+   "returned_kb": 0
+  },
+  {
+   "variant": "limits moving-window (memory)",
+   "clients": 200000,
+   "rehit": 10000,
+   "rss_full_kb": 118844,
+   "rss_end_kb": 118916,
+   "returned_kb": -72
+  },
+  {
+   "variant": "aiolimiter (per-key)",
+   "clients": 200000,
+   "rehit": 10000,
+   "rss_full_kb": 218440,
+   "rss_end_kb": 218440,
+   "returned_kb": 0
+  }
+ ],
+ "thread_race": [
+  {
+   "variant": "dripline GCRA (dict)",
+   "expected": 100,
+   "admitted": 100,
+   "overshoot": 0
+  },
+  {
+   "variant": "limits fixed-window (memory)",
+   "expected": 100,
+   "admitted": 100,
+   "overshoot": 0
+  },
+  {
+   "variant": "limits moving-window (memory)",
+   "expected": 100,
+   "admitted": 100,
+   "overshoot": 0
+  }
+ ]
+}
