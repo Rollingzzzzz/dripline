@@ -60,6 +60,29 @@ and fail-closed: presence false-positives over-reject for at most one
 rotation window; a stale tick only makes the limiter stricter; same-slot
 races lose at most one update.
 
+## FastAPI / Starlette (dripline[fastapi] — one import, one decorator)
+
+```python
+from fastapi import FastAPI, Request
+from dripline.ext.fastapi import Limiter, api_key_header
+
+app = FastAPI()
+limiter = Limiter(key_func=api_key_header)          # or key_func="x-api-key"
+# multi-worker deployments: Limiter(..., path="/run/dripline.arena")
+
+@app.get("/data")
+@limiter.limit("1000/10s")            # burst bank = one window by default
+async def get_data(request: Request): # request param = the slowapi convention
+    return {"ok": True}
+```
+
+Over budget -> 429 with `Retry-After` (RFC integer seconds) AND
+`X-RateLimit-Retry-After-Ns` (the exact nanosecond wait — no rounding).
+Nothing to install on the app. One engine per rate spec is built from
+ApexLimiter by default; `path=` shares budgets across uvicorn workers.
+Pure-ASGI apps: `app.add_middleware(LimiterMiddleware, rate="1000/10s")`.
+Only Starlette is imported — works for any Starlette-based framework.
+
 ## Tick mode (v0.3 — exact admits, clock-amortized rejects)
 
 ```python
