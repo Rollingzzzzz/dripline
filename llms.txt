@@ -31,6 +31,27 @@ ns). Admit pushes it one interval forward; it may lead the clock by at most
 no cleanup, no resets. The int return keeps the hot path allocation-free —
 the largest single measured CPython cost of a tuple-returning API.
 
+## Tick mode (v0.3 — the fast engine; 16% of Rust governor measured)
+
+```python
+from dripline import TickGcraLimiter
+
+lim = TickGcraLimiter(rate_per_second=1000 / 60, burst=100, pump_every=512)
+retry_ns = lim.try_acquire("client-id")   # same int contract
+```
+
+Admits always read a fresh clock (exact); rejects compare against a coarse
+shared tick refreshed every `pump_every` decisions. Error direction: a stale
+tick is in the past, so pressure only makes the limiter stricter — never
+looser; over-rejection is bounded by the pump interval. Measured: 267
+ns/dec reject-dominated vs 306 exact / 779 aiolimiter; 10.9M dec/s
+multi-worker.
+
+`BloomGcraLimiter` (bloom.py) is experimental: a rotating fail-closed
+reject filter that measured SLOWER than the exact path in CPython
+(docs/adr/0001) — kept for the mmap-arena-fronting idea, not a shipped
+engine.
+
 ## Arena API (v0.2 — fixed footprint, shared across workers)
 
 ```python

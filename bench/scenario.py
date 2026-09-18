@@ -56,8 +56,10 @@ SCENARIOS = {
         aiolimiter=(10, 10), ceiling=10 + (10 / 10) * DURATION_S),
 }
 
-ENGINE_ORDER = ["no-op-floor", "dripline-gcra", "dripline-arena",
+ENGINE_ORDER = ["no-op-floor", "dripline-gcra", "dripline-arena", "dripline-tick",
                 "limits-fixed-window", "aiolimiter-perkey", "governor-rust"]
+# dripline-bloom is measured and rejected for CPython (docs/adr/0001) — the
+# decider branch below stays so it can still be run ad hoc.
 
 ARENA_SLOTS = 1024          # 100 clients → collision-free by a wide margin
 
@@ -78,6 +80,12 @@ def decider_for(engine: str, sc: dict):
         lim = ArenaGcraLimiter(rate_per_second=rate, burst=burst,
                                slots=ARENA_SLOTS,
                                path=os.environ.get("DRIPLINE_ARENA_PATH"))
+        return lambda key: not lim.try_acquire(key)
+    if engine in ("dripline-bloom", "dripline-tick"):
+        from dripline import BloomGcraLimiter, TickGcraLimiter
+        rate, burst = sc["dripline"]
+        cls = BloomGcraLimiter if engine == "dripline-bloom" else TickGcraLimiter
+        lim = cls(rate_per_second=rate, burst=burst)
         return lambda key: not lim.try_acquire(key)
     if engine in ("limits-fixed-window", "limits-moving-window"):
         from limits import parse

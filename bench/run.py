@@ -118,6 +118,19 @@ def _make_dripline_arena(rate_per_second: float, burst: int,
     return factory
 
 
+def _make_dripline_tick(rate_per_second: float, burst: int,
+                        pump_every: int) -> Callable[[], Callable[[str], bool]]:
+    def factory() -> Callable[[str], bool]:
+        from dripline import TickGcraLimiter
+        lim = TickGcraLimiter(rate_per_second=rate_per_second, burst=burst,
+                              pump_every=pump_every)
+
+        def decide(key: str) -> bool:
+            return not lim.try_acquire(key)
+        return decide
+    return factory
+
+
 def _make_limits(strategy: str, rate_str: str) -> Callable[[], Callable[[str], bool]]:
     def factory() -> Callable[[str], bool]:
         from limits import parse
@@ -175,6 +188,11 @@ def build_variants(profile: str) -> list[Variant]:
                     "1000/min, burst 100, 2M slots", "sync",
                     _make_dripline_arena(1000 / 60, 100, 2_000_000),
                     guard_capacity=100, max_rss_k=1_000_000),
+            Variant("dripline-tick", "dripline tick (coarse clock)",
+                    "GCRA, exact admits + coarse-tick rejects",
+                    "1000/min, burst 100, pump 512", "sync",
+                    _make_dripline_tick(1000 / 60, 100, 512),
+                    guard_capacity=100),
             Variant("limits-fixed-window", "slowapi engine (limits) — fixed window",
                     "fixed window", "1000/minute", "sync", _make_limits("fixed", "1000/minute"),
                     requires="limits", guard_capacity=1000, max_rss_k=1_000_000),
@@ -198,6 +216,11 @@ def build_variants(profile: str) -> list[Variant]:
                 "10/min, burst 1, 2M slots", "sync",
                 _make_dripline_arena(10 / 60, 1, 2_000_000),
                 guard_capacity=1, max_rss_k=1_000_000),
+        Variant("dripline-tick", "dripline tick (coarse clock)",
+                "GCRA, exact admits + coarse-tick rejects",
+                "10/min, burst 1, pump 512", "sync",
+                _make_dripline_tick(10 / 60, 1, 512),
+                guard_capacity=1),
         Variant("limits-fixed-window", "slowapi engine (limits) — fixed window",
                 "fixed window", "1/minute", "sync", _make_limits("fixed", "1/minute"),
                 requires="limits", guard_capacity=1, max_rss_k=1_000_000),

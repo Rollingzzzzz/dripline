@@ -6,6 +6,8 @@
 # smoke tests (no dependencies needed)
 PYTHONPATH=src python tests/test_core.py
 PYTHONPATH=src python tests/test_arena.py
+PYTHONPATH=src python tests/test_bloom.py
+PYTHONPATH=src python tests/test_tick.py
 
 # full test suite
 PYTHONPATH=src python -m pytest tests/
@@ -29,9 +31,10 @@ docker run --rm --cpuset-cpus=2 --memory=8g -v "${PWD}:/bench" python:3.12-slim 
 
 ## Current state
 
-Branch v0.2: fixed mmap slot arena (`src/dripline/arena.py`) on top of the
-scalar GCRA core — shared across workers via one file, self-ageing recycling,
-flat RSS, fp-cache hot path, NumPy stats behind `dripline[numpy]`. Standing
-verification rule: every core change re-runs the scenario scoreboard before
-commit (bench/README.md). Still open from v0.1: decorator + ASGI middleware;
-then v0.3 clock-free mode.
+Branch v0.2: mmap slot arena (shared budgets, flat RSS) + v0.2.1
+allocation-free hot path (int returns) + v0.3 modes: TickGcraLimiter
+(coarse-tick rejects, exact admits — fastest engine, 16% of governor) and
+experimental BloomGcraLimiter (rejected for CPython, docs/adr/0001).
+Standing verification rule: every core change re-runs the scenario
+scoreboard before commit (bench/README.md). Still open from v0.1:
+decorator + ASGI middleware.
