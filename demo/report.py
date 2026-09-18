@@ -148,7 +148,10 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=Path("demo/out/report.html"))
     args = ap.parse_args()
 
-    runs = {key_of(load(p)): load(p) for p in args.runs}
+    runs = {key_of(load(p)): load(p) for p in args.runs
+            if "speed" not in p.stem}
+    speed = {load(p)["engine"]: load(p) for p in args.runs
+             if "speed" in p.stem}
     four = {k: v for k, v in runs.items() if k[1] > 1}
     one = {k: v for k, v in runs.items() if k[1] == 1}
     sample = next(iter(runs.values()))
@@ -186,6 +189,32 @@ def main() -> int:
         samples = ", ".join(f"<code>{int(s)/1e9:.2f}s</code>" for s in retry_sample)
         sections += ["<h2>3 · Retry-After: exact waits, not guesses</h2>",
                      f'<p class="sub">Sample values returned by dripline: {samples}</p>']
+
+    if len(speed) == 2:
+        rows, rps = [], {}
+        for engine, run in sorted(speed.items()):
+            achieved = run["totals"]["sent"] / run["duration_s"]
+            rps[engine] = achieved
+            lat = run.get("latency", {})
+            rows.append(f"<tr><td>{ENGINE_LABEL.get(engine, engine)}</td>"
+                        f"<td>{achieved:,.0f}</td>"
+                        f"<td>{lat.get('p50_ms','—')}</td>"
+                        f"<td>{lat.get('p99_ms','—')}</td></tr>")
+        fast, slow = sorted(rps, key=rps.get, reverse=True)
+        margin = (rps[fast] / rps[slow] - 1) * 100
+        verdict = (f"{fast} sustained {margin:.0f}% more throughput"
+                   if margin >= 5 else
+                   "a tie within run-to-run noise (both saturate the HTTP "
+                   "stack equally — the engines' decision-layer gap lives "
+                   "in bench/results, not here)")
+        sections += [
+            "<h2>4 · Raw throughput — who is faster?</h2>",
+            '<p class="sub">Saturation probe: 4 workers, no rejections '
+            "(rate spec far above demand), unpaced streams. Achieved "
+            "requests/second = pure HTTP + limiter throughput. Verdict: "
+            f"<b>{verdict}</b>.</p>",
+            "<table><tr><th>engine</th><th>achieved req/s</th>"
+            "<th>p50 ms</th><th>p99 ms</th></tr>" + "".join(rows) + "</table>"]
 
     stamp = datetime.now(UTC).isoformat(timespec="seconds")
     html = f"""<!doctype html><html><head><meta charset="utf-8">

@@ -31,6 +31,14 @@ def compose(*args: str, env_extra: dict | None = None) -> None:
                    check=True, env=env)
 
 
+SPEED_PROBE = {
+    # Saturation probe: huge rate spec (nothing rejects), unpaced streams —
+    # achieved req/s = pure HTTP+limiter throughput per engine, 4 workers.
+    "RATE": "100000/10s", "KEY_COUNT": "20", "RATE_PER_KEY": "100000",
+    "STREAMS_PER_KEY": "8", "DURATION": "6", "WORKERS": "4",
+}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--quick", action="store_true",
@@ -55,6 +63,17 @@ def main() -> int:
                   file=sys.stderr)
             compose("up", "-d", "server", env_extra=env)
             print(f"=== {tag}: client load…", file=sys.stderr)
+            compose("run", "--rm", "client", env_extra=env)
+            jsons.append(OUT_DIR / f"run-{tag}.json")
+        for engine in ("dripline", "aiolimiter"):
+            if args.quick:
+                break
+            tag = f"{engine}-speed"
+            env = {"ENGINE": engine, "OUT": f"/out/run-{tag}.json",
+                   **SPEED_PROBE}
+            print(f"=== {tag}: saturation probe (4 workers, no rejects)…",
+                  file=sys.stderr)
+            compose("up", "-d", "server", env_extra=env)
             compose("run", "--rm", "client", env_extra=env)
             jsons.append(OUT_DIR / f"run-{tag}.json")
     finally:
