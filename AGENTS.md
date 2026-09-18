@@ -8,7 +8,6 @@ PYTHONPATH=src python tests/test_core.py
 PYTHONPATH=src python tests/test_arena.py
 PYTHONPATH=src python tests/test_bloom.py
 PYTHONPATH=src python tests/test_tick.py
-PYTHONPATH=src python tests/test_presence.py
 PYTHONPATH=src python tests/test_apex.py
 PYTHONPATH=src python tests/test_rates.py
 PYTHONPATH=src python tests/test_fastapi.py   # needs fastapi+httpx installed

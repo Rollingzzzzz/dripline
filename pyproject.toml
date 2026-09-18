@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dripline"
-version = "0.0.1"
+version = "0.4.0"
 description = "Per-subscriber rate limiting that drips, not floods. Fixed-footprint, Redis-optional rate limiting for FastAPI/ASGI."
 readme = "README.md"
 requires-python = ">=3.11"

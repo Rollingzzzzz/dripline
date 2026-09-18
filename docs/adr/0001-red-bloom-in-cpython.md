@@ -42,7 +42,10 @@ per bytecode, not per cleverness.
 
 ## Decision
 
-`BloomGcraLimiter` stays in the package (experimental, tested), but is not
-in the standing engine lists (`bench/scenario.py` ENGINE_ORDER,
-`bench/run.py` variants). Its decider branch remains in scenario.py for
-ad-hoc runs. Revisit if the arena-fronting experiment above measures a win.
+`BloomGcraLimiter` (and its byte-map descendant `PresenceTickLimiter`,
+which measured 15% vs tick's 16% in v0.3.1) were removed from the package
+at the 0.4.0 release to keep the public surface sharp — git history keeps
+both. The idea won where it was always going to win: the byte-addressed,
+generation-stamped presence map is the L1 layer of `ApexLimiter`
+(src/dripline/apex.py). Revisit a standalone filter only if a future
+engine's miss path becomes expensive enough to front.

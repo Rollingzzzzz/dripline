@@ -99,11 +99,6 @@ looser; over-rejection is bounded by the pump interval. Measured: 267
 ns/dec reject-dominated vs 306 exact / 779 aiolimiter; 10.9M dec/s
 multi-worker.
 
-`BloomGcraLimiter` (bloom.py) is experimental: a rotating fail-closed
-reject filter that measured SLOWER than the exact path in CPython
-(docs/adr/0001) — kept for the mmap-arena-fronting idea, not a shipped
-engine.
-
 ## Arena API (v0.2 — fixed footprint, shared across workers)
 
 ```python

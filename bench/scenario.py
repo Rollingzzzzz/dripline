@@ -59,9 +59,8 @@ SCENARIOS = {
 ENGINE_ORDER = ["no-op-floor", "dripline-gcra", "dripline-arena", "dripline-tick",
                 "dripline-apex", "limits-fixed-window", "aiolimiter-perkey",
                 "governor-rust"]
-# dripline-bloom and dripline-presence are measured out of the standing set
-# (docs/adr/0001; presence v0.3.1: 15% vs tick 16%) — decider branches below
-# stay so both can still be run ad hoc.
+# The standing engines. bloom/presence were measured out (docs/adr/0001);
+# their winning form lives inside apex as the L1 heat map.
 # dripline-bloom is measured and rejected for CPython (docs/adr/0001) — the
 # decider branch below stays so it can still be run ad hoc.
 
@@ -85,13 +84,10 @@ def decider_for(engine: str, sc: dict):
                                slots=ARENA_SLOTS,
                                path=os.environ.get("DRIPLINE_ARENA_PATH"))
         return lambda key: not lim.try_acquire(key)
-    if engine in ("dripline-bloom", "dripline-tick", "dripline-presence"):
-        from dripline import BloomGcraLimiter, PresenceTickLimiter, TickGcraLimiter
+    if engine == "dripline-tick":
+        from dripline import TickGcraLimiter
         rate, burst = sc["dripline"]
-        cls = {"dripline-bloom": BloomGcraLimiter,
-               "dripline-tick": TickGcraLimiter,
-               "dripline-presence": PresenceTickLimiter}[engine]
-        lim = cls(rate_per_second=rate, burst=burst)
+        lim = TickGcraLimiter(rate_per_second=rate, burst=burst)
         return lambda key: not lim.try_acquire(key)
     if engine == "dripline-apex":
         from dripline import ApexLimiter
