@@ -116,7 +116,7 @@ class ArenaGcraLimiter:
         else:
             self._cmask = -1
             self._cache_keys = None
-        size = slots * SLOT_BYTES
+        size = self._region_size(slots)
         if path is None:
             self._mm = mmap.mmap(-1, size)
         else:
@@ -128,6 +128,10 @@ class ArenaGcraLimiter:
                     f.truncate(size)
                 self._mm = mmap.mmap(f.fileno(), size)  # shared map
         self._words = memoryview(self._mm).cast("q")
+
+    def _region_size(self, slots: int) -> int:
+        """Extension point: subclasses may append regions after the slots."""
+        return slots * SLOT_BYTES
 
     # -- hot path ---------------------------------------------------------- #
 
@@ -210,7 +214,8 @@ class ArenaGcraLimiter:
             raise ImportError("ArenaGcraLimiter.stats() needs NumPy: "
                               "pip install 'dripline[numpy]'") from exc
         now = time.monotonic_ns() if now_ns is None else now_ns
-        table = np.frombuffer(self._mm, dtype=np.int64).reshape(-1, 4)
+        region = self._mm[:self._cap * SLOT_BYTES]  # subclasses append extra
+        table = np.frombuffer(region, dtype=np.int64).reshape(-1, 4)
         occupied = table[:, 1] != 0
         active = occupied & (table[:, 0] > now)
         occupied_n = int(occupied.sum())

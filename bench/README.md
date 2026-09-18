@@ -94,6 +94,15 @@ docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-sli
   python /bench/bench/scenario.py --scenario tight   # merges into the same report
 ```
 
+Targeted verification of a single engine (cheap iteration; compare against
+the last full-table run — keep governor in the subset so the %gov row stays
+in-session honest):
+
+```bash
+docker run --rm --cpuset-cpus=0-3 --memory=8g -v "${PWD}:/bench" python:3.12-slim \
+  python /bench/bench/scenario.py --only dripline-apex,governor-rust
+```
+
 ## Standing verification — every core change runs the scoreboard
 
 The scenario benchmark is the project's regression gate, not a one-off. Every

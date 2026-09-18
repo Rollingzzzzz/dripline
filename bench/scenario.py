@@ -57,7 +57,11 @@ SCENARIOS = {
 }
 
 ENGINE_ORDER = ["no-op-floor", "dripline-gcra", "dripline-arena", "dripline-tick",
-                "limits-fixed-window", "aiolimiter-perkey", "governor-rust"]
+                "dripline-apex", "limits-fixed-window", "aiolimiter-perkey",
+                "governor-rust"]
+# dripline-bloom and dripline-presence are measured out of the standing set
+# (docs/adr/0001; presence v0.3.1: 15% vs tick 16%) — decider branches below
+# stay so both can still be run ad hoc.
 # dripline-bloom is measured and rejected for CPython (docs/adr/0001) — the
 # decider branch below stays so it can still be run ad hoc.
 
@@ -81,11 +85,19 @@ def decider_for(engine: str, sc: dict):
                                slots=ARENA_SLOTS,
                                path=os.environ.get("DRIPLINE_ARENA_PATH"))
         return lambda key: not lim.try_acquire(key)
-    if engine in ("dripline-bloom", "dripline-tick"):
-        from dripline import BloomGcraLimiter, TickGcraLimiter
+    if engine in ("dripline-bloom", "dripline-tick", "dripline-presence"):
+        from dripline import BloomGcraLimiter, PresenceTickLimiter, TickGcraLimiter
         rate, burst = sc["dripline"]
-        cls = BloomGcraLimiter if engine == "dripline-bloom" else TickGcraLimiter
+        cls = {"dripline-bloom": BloomGcraLimiter,
+               "dripline-tick": TickGcraLimiter,
+               "dripline-presence": PresenceTickLimiter}[engine]
         lim = cls(rate_per_second=rate, burst=burst)
+        return lambda key: not lim.try_acquire(key)
+    if engine == "dripline-apex":
+        from dripline import ApexLimiter
+        rate, burst = sc["dripline"]
+        lim = ApexLimiter(rate_per_second=rate, burst=burst, slots=ARENA_SLOTS,
+                          path=os.environ.get("DRIPLINE_ARENA_PATH"))
         return lambda key: not lim.try_acquire(key)
     if engine in ("limits-fixed-window", "limits-moving-window"):
         from limits import parse
@@ -166,7 +178,7 @@ def run_engine(engine: str, scenario_name: str, duration: float,
     else:
         cmd = [sys.executable, str(Path(__file__).resolve()), "--worker",
                engine, scenario_name, str(duration)]
-        if engine == "dripline-arena":
+        if engine in ("dripline-arena", "dripline-apex"):
             # One arena file per (engine, repeat) run: every worker maps the
             # same file, so budgets are global — the v0.2 deployment model.
             fd, arena_path = tempfile.mkstemp(prefix="dripline-arena-",
@@ -329,6 +341,10 @@ def main() -> int:
                          "vX.Y.scenario.md output (default: fast 20 s, "
                          "vX.Y.scenario.fast.md)")
     ap.add_argument("--workers", type=int, default=WORKERS)
+    ap.add_argument("--only", default=None, metavar="ENGINES",
+                    help="comma-separated engine subset — targeted verification "
+                         "of one engine against the full-table run (e.g. "
+                         "'dripline-apex,governor-rust' keeps the %gov row)")
     ap.add_argument("--repeats", type=int, default=REPEATS,
                     help="repeats per cell; median reported (default 3)")
     ap.add_argument("--version", default="v0.1")
@@ -364,6 +380,12 @@ def main() -> int:
            "platform": platform.platform()}
     bin_path = rust_bin()
     engines = [e for e in ENGINE_ORDER if e != "governor-rust" or bin_path]
+    if args.only:
+        wanted = {e.strip() for e in args.only.split(",")}
+        unknown = wanted - set(ENGINE_ORDER)
+        if unknown:
+            ap.error(f"unknown engines {sorted(unknown)}; valid: {ENGINE_ORDER}")
+        engines = [e for e in engines if e in wanted]
     if "governor-rust" not in engines:
         print("governor binary unavailable — Rust row skipped (build it first)",
               file=sys.stderr)

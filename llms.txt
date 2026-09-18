@@ -31,7 +31,32 @@ ns). Admit pushes it one interval forward; it may lead the clock by at most
 no cleanup, no resets. The int return keeps the hot path allocation-free —
 the largest single measured CPython cost of a tuple-returning API.
 
-## Tick mode (v0.3 — the fast engine; 16% of Rust governor measured)
+## Apex (the flagship: shared arena + tick + presence in one mmap)
+
+```python
+from dripline import ApexLimiter
+
+# every worker opens the SAME file: slots, heat map and generation are
+# shared — one global budget per client, no Redis, no cleanup thread
+lim = ApexLimiter(rate_per_second=1000 / 60, burst=100,
+                  slots=1_000_000, path="/run/dripline.apex")
+retry_ns = lim.try_acquire("client-id")   # same int contract
+```
+
+Three layers in one region (slots | heat map | generation word): L1 answers
+"rejected a moment ago" from one shared byte stamped with the current
+generation — rotation is O(1) (bump the generation; old stamps stop
+matching; writing is deleting, again). L2 locates the client's slot via a
+stable fingerprint (same key, same slot, every process). L3 rejects against
+a per-process coarse tick (no clock read); L4 admits with a fresh clock —
+exact. Measured (4 workers, pinned): 9.4M dec/s = 14% of Rust governor
+with TRUE global budgets (admits 301,724 vs 300,000 ceiling) — every
+per-worker engine on the same board admits 4x over. Errors are all bounded
+and fail-closed: presence false-positives over-reject for at most one
+rotation window; a stale tick only makes the limiter stricter; same-slot
+races lose at most one update.
+
+## Tick mode (v0.3 — exact admits, clock-amortized rejects)
 
 ```python
 from dripline import TickGcraLimiter
